@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<title>策行 · 旅行规划</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+:root{
+  --bg:#F2EFE8; --paper:#FFF; --ink:#1A1A1A; --sub:#8E8E88; --subL:#B8B8B0; --line:#E6E2D8;
+  --sage:#8BB08E; --sageL:#E5EFE6; --sageD:#4E7352;
+  --serif:"Noto Serif SC","Songti SC","PingFang SC",serif;
+  --body:"Inter","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+body{font-family:var(--body);background:var(--bg);overscroll-behavior:none;min-height:100vh;color:var(--ink);-webkit-font-smoothing:antialiased}
+input,textarea,button{font-family:inherit;outline:none}
+input[type=range]{-webkit-appearance:none;height:5px;background:#E6E2D8;border-radius:3px;width:100%}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#4E7352;cursor:pointer;box-shadow:0 2px 8px rgba(78,115,82,.3)}
+::-webkit-scrollbar{display:none}
+.modal-bg{position:fixed;inset:0;z-index:200;background:rgba(20,20,20,.48);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:16px;animation:fadeIn .2s}
+.modal-box{width:100%;max-width:440px;background:#FAF8F2;border-radius:28px;box-shadow:0 24px 64px rgba(20,20,20,.18);padding:24px 22px 28px;max-height:90vh;overflow-y:auto;animation:popIn .25s cubic-bezier(.16,1,.3,1)}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes popIn{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
+.fl{font-size:10px;font-weight:600;color:var(--sub);margin-bottom:6px;letter-spacing:1.5px;text-transform:uppercase}
+.tf{width:100%;border:1px solid var(--line);border-radius:13px;padding:11px 14px;font-size:13px;background:rgba(255,255,255,.75);color:var(--ink);margin-bottom:10px;transition:all .15s}
+.tf:focus{border-color:var(--sage);background:#fff;box-shadow:0 0 0 3px rgba(139,176,142,.12)}
+.cat-btn{padding:5px 11px;border-radius:99px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:all .1s}
+.toast{position:fixed;top:40px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 22px;border-radius:99px;font-size:13px;z-index:1000;box-shadow:0 8px 24px rgba(0,0,0,.3);animation:tIn .3s}
+@keyframes tIn{from{opacity:0;transform:translate(-50%,-10px)}to{opacity:1;transform:translate(-50%,0)}}
+.drag-card{touch-action:none;-webkit-user-select:none;user-select:none}
+.serif{font-family:var(--serif)}
+.stamp{display:inline-block;padding:3px 10px;border:1.5px solid var(--sageD);border-radius:4px;color:var(--sageD);font-size:9px;font-weight:700;letter-spacing:2px;transform:rotate(-2deg);background:rgba(255,255,255,.6)}
+.dash-div{height:1px;background-image:linear-gradient(90deg,transparent 50%,var(--line) 50%);background-size:10px 1px;background-repeat:repeat-x}
+.paper-tex{background-image:repeating-linear-gradient(0deg,transparent 0,transparent 22px,rgba(139,176,142,.04) 22px,rgba(139,176,142,.04) 23px),radial-gradient(rgba(78,115,82,.06) .8px,transparent .8px);background-size:100% 23px,14px 14px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>window.FIREBASE_CONFIG=null;</script>
+<script type="text/babel">
+const {useState,useRef,useEffect}=React;
+const C={bg:"#F2EFE8",white:"#FFF",ink:"#1A1A1A",sub:"#8E8E88",subL:"#B8B8B0",line:"#E6E2D8",sage:"#8BB08E",sageL:"#E5EFE6",sageD:"#4E7352"};
+const CATS={food:{bg:"#F8ECDC",fg:"#9B5A30",label:"美食"},stay:{bg:"#DDE6F5",fg:"#3A6BA5",label:"住宿"},spot:{bg:"#E0EFDE",fg:"#4A7A50",label:"景点"},fun:{bg:"#F5DCE4",fg:"#A03862",label:"娱乐"},shop:{bg:"#F5EDD5",fg:"#8C6B1F",label:"购物"},other:{bg:"#EAEAE5",fg:"#706F68",label:"其他"}};
+const CATKEYS=Object.keys(CATS);
+const SLOTS={morning:{label:"上午",time:"08:00 — 12:00",sym:"☼"},afternoon:{label:"下午",time:"12:00 — 18:00",sym:"☉"},evening:{label:"晚间",time:"18:00 — 22:00",sym:"☾"}};
+
+const hasFB=typeof window!=='undefined'&&window._db;
+function fbSave(id,d){if(!hasFB)return;try{window._db.ref('trips/'+id).set(d);}catch(e){}}
+function fbSub(id,cb){if(!hasFB)return function(){};try{var r=window._db.ref('trips/'+id);r.on('value',function(s){var v=s.val();if(v)cb(v);});return function(){r.off();};}catch(e){return function(){};}}
+function fbGet(id){if(!hasFB)return Promise.resolve(null);return window._db.ref('trips/'+id).once('value').then(function(s){return s.val();});}
+
+const LS='cexing_v1';
+function ldLS(){try{var r=localStorage.getItem(LS);return r?JSON.parse(r):null;}catch(e){return null;}}
+function svLS(d){try{localStorage.setItem(LS,JSON.stringify(d));}catch(e){}}
+
+function enc(trip,plans,cards){
+  try{
+    var sp={};Object.keys(plans).forEach(function(day){sp[day]={};['morning','afternoon','evening'].forEach(function(s){sp[day][s]=(plans[day][s]||[]).map(function(c){return {id:c.id,name:c.name,cat:c.cat,hours:c.hours||'',note:c.note||''};});});});
+    var sc=cards.map(function(c){return {id:c.id,name:c.name,cat:c.cat,hours:c.hours||'',note:c.note||''};});
+    var json=JSON.stringify({v:1,trip:trip,plans:sp,cards:sc});
+    var b64=btoa(encodeURIComponent(json).replace(/%([0-9A-F]{2})/g,function(_,p){return String.fromCharCode('0x'+p);}));
+    return b64.replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  }catch(e){return null;}
+}
+function dec(code){
+  try{
+    var b64=code.trim().replace(/-/g,'+').replace(/_/g,'/');while(b64.length%4)b64+='=';
+    var json=decodeURIComponent(Array.prototype.map.call(atob(b64),function(c){return '%'+('00'+c.charCodeAt(0).toString(16)).slice(-2);}).join(''));
+    var obj=JSON.parse(json);if(!obj.v||!obj.trip)return null;return obj;
+  }catch(e){return null;}
+}
+
+function Ic({n,s,c,st}){
+  s=s||20;c=c||C.ink;st=st||{};
+  var p={
+    food:<><path d="M12 2v6M8.5 2v3.5M15.5 2v3.5" strokeWidth="1.7" strokeLinecap="round" fill="none"/><path d="M8.5 8C8.5 11 10 13 12 14s3.5-3 3.5-6" strokeWidth="1.7" fill="none"/><path d="M12 14v7M9.5 21h5" strokeWidth="1.7" strokeLinecap="round" fill="none"/></>,
+    stay:<><path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1z" strokeWidth="1.7" fill="none"/><path d="M9 21V13h6v8" strokeWidth="1.7" fill="none"/></>,
+    spot:<><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" strokeWidth="1.7" fill="none"/><circle cx="12" cy="9" r="2.5" strokeWidth="1.7" fill="none"/></>,
+    fun:<><circle cx="12" cy="12" r="9" strokeWidth="1.7" fill="none"/><path d="M8.5 14.5s1 1.5 3.5 1.5 3.5-1.5 3.5-1.5" strokeWidth="1.7" strokeLinecap="round" fill="none"/><circle cx="9.5" cy="10" r="1.2" fill={c} stroke="none"/><circle cx="14.5" cy="10" r="1.2" fill={c} stroke="none"/></>,
+    shop:<><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" strokeWidth="1.7" fill="none"/><line x1="3" y1="6" x2="21" y2="6" strokeWidth="1.7"/><path d="M16 10a4 4 0 01-8 0" strokeWidth="1.7" fill="none"/></>,
+    other:<><circle cx="12" cy="12" r="9" strokeWidth="1.7" fill="none"/><path d="M12 7v5l3 3" strokeWidth="1.7" strokeLinecap="round" fill="none"/></>,
+    back:<path d="M15 18l-6-6 6-6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+    fwd:<path d="M9 6l6 6-6 6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+    plus:<path d="M12 5v14M5 12h14" strokeWidth="2.2" strokeLinecap="round" fill="none"/>,
+    x:<path d="M18 6L6 18M6 6l12 12" strokeWidth="1.8" strokeLinecap="round" fill="none"/>,
+    share:<><circle cx="18" cy="5" r="2" strokeWidth="1.5" fill="none"/><circle cx="6" cy="12" r="2" strokeWidth="1.5" fill="none"/><circle cx="18" cy="19" r="2" strokeWidth="1.5" fill="none"/><path d="M8 11l8-5M8 13l8 5" strokeWidth="1.5" fill="none"/></>,
+    clock:<><circle cx="12" cy="12" r="9" strokeWidth="1.5" fill="none"/><path d="M12 7v5l3 3" strokeWidth="1.5" strokeLinecap="round" fill="none"/></>,
+    plane:<><path d="M21 3L3 10.5l7.5 3M21 3l-7.5 10.5-3-7.5" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M10.5 13.5L14 17" strokeWidth="1.6" strokeLinecap="round" fill="none"/></>,
+    edit:<><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeWidth="1.5" fill="none"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeWidth="1.5" fill="none"/></>,
+    code:<><polyline points="16 18 22 12 16 6" strokeWidth="1.5" fill="none"/><polyline points="8 6 2 12 8 18" strokeWidth="1.5" fill="none"/></>,
+    grip:<><circle cx="9" cy="6" r="1.2" fill={c} stroke="none"/><circle cx="15" cy="6" r="1.2" fill={c} stroke="none"/><circle cx="9" cy="12" r="1.2" fill={c} stroke="none"/><circle cx="15" cy="12" r="1.2" fill={c} stroke="none"/><circle cx="9" cy="18" r="1.2" fill={c} stroke="none"/><circle cx="15" cy="18" r="1.2" fill={c} stroke="none"/></>,
+    up:<path d="M18 15l-6-6-6 6" strokeWidth="1.8" strokeLinecap="round" fill="none"/>,
+    down:<path d="M6 9l6 6 6-6" strokeWidth="1.8" strokeLinecap="round" fill="none"/>,
+    user:<><circle cx="12" cy="8" r="4" strokeWidth="1.5" fill="none"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeWidth="1.5" fill="none"/></>,
+    trash:<><polyline points="3 6 5 6 21 6" strokeWidth="1.5" fill="none" strokeLinecap="round"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2" strokeWidth="1.5" fill="none"/></>,
+    img:<><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth="1.5" fill="none"/><circle cx="8.5" cy="8.5" r="1.5" fill={c} stroke="none"/><path d="M21 15l-5-5L5 21" strokeWidth="1.5" fill="none"/></>,
+    check:<polyline points="20 6 9 17 4 12" strokeWidth="2.2" strokeLinecap="round" fill="none"/>,
+    copy:<><rect x="9" y="9" width="13" height="13" rx="2" strokeWidth="1.5" fill="none"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" strokeWidth="1.5" fill="none"/></>,
+    pic:<><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth="1.5" fill="none"/><polyline points="3 9 9 3 15 9" strokeWidth="1.5" fill="none"/><polyline points="21 15 15 21 9 15" strokeWidth="1.5" fill="none"/></>,
+    sel:<><rect x="3" y="3" width="18" height="18" rx="3" strokeWidth="1.5" fill="none"/><polyline points="9 12 11 14 15 10" strokeWidth="1.7" fill="none" strokeLinecap="round"/></>,
+    cloud:<><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z" strokeWidth="1.5" fill="none"/></>,
+    compass:<><circle cx="12" cy="12" r="9" strokeWidth="1.5" fill="none"/><polygon points="16 8 14 14 8 16 10 10" strokeWidth="1.5" fill="none" strokeLinejoin="round"/></>,
+  };
+  return <svg width={s} height={s} viewBox="0 0 24 24" style={{display:'block',flexShrink:0,stroke:c,...st}}>{p[n]||null}</svg>;
+}
+function CD({cat,size}){size=size||34;var cc=CATS[cat];return <div style={{width:size,height:size,borderRadius:Math.round(size*.32),background:cc.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Ic n={cat} s={Math.round(size*.5)} c={cc.fg}/></div>;}
+function CT({cat,sm}){var cc=CATS[cat];return <span style={{display:'inline-flex',alignItems:'center',gap:3,background:cc.bg,color:cc.fg,borderRadius:99,padding:sm?'2px 7px':'3px 9px',fontSize:sm?9:11,fontWeight:600,whiteSpace:'nowrap'}}><Ic n={cat} s={sm?8:10} c={cc.fg}/>{cc.label}</span>;}
+function Toast({msg,onDone}){useEffect(function(){var t=setTimeout(onDone,2000);return function(){clearTimeout(t);};},[msg]);return <div className="toast">{msg}</div>;}
+function Modal({onClose,children,mw}){return <div className="modal-bg" onClick={onClose}><div className="modal-box" style={{maxWidth:mw||440}} onClick={function(e){e.stopPropagation();}}>{children}</div></div>;}
+function MH({title,onClose}){return <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}><div className="serif" style={{fontSize:22,fontWeight:500,letterSpacing:-.4}}>{title}</div><button onClick={onClose} style={{width:32,height:32,borderRadius:10,background:C.bg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><Ic n="x" s={14} c={C.sub}/></button></div>;}
+function FL({t}){return <div className="fl">{t}</div>;}
+function TF({v,set,ph,mb,ta}){var st={marginBottom:mb||10};return ta?<textarea value={v} onChange={function(e){set(e.target.value);}} placeholder={ph} rows={4} className="tf" style={{...st,resize:'none'}}/>:<input value={v} onChange={function(e){set(e.target.value);}} placeholder={ph} className="tf" style={st}/>;}
+function DaySlider({v,set}){return <div>
+  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
+    <span style={{fontSize:12,color:C.sub}}>1日</span>
+    <span className="serif" style={{fontSize:30,fontWeight:500,color:C.sageD,letterSpacing:-1}}>{v}<span style={{fontSize:14,fontWeight:400,color:C.sub,marginLeft:4,fontFamily:'var(--body)'}}>天</span></span>
+    <span style={{fontSize:12,color:C.sub}}>15日</span>
+  </div>
+  <input type="range" min={1} max={15} value={v} onChange={function(e){set(+e.target.value);}} style={{accentColor:C.sageD}}/>
+  <div style={{display:'flex',gap:4,marginTop:12}}>
+    {[1,3,5,7,10,14,15].map(function(n){return <button key={n} onClick={function(){set(n);}} style={{flex:1,padding:'6px 0',borderRadius:9,background:v===n?C.sageD:'#fff',color:v===n?'#fff':C.sub,fontSize:11,cursor:'pointer',fontWeight:v===n?600:400,border:v===n?'none':'1px solid '+C.line}}>{n}</button>;})}
+  </div>
+</div>;}
+
+function ImgUp({imgs,setImgs}){
+  var ref=useRef();
+  function handle(files){Array.from(files).forEach(function(f){if(!f.type.startsWith('image/'))return;var r=new FileReader();r.onload=function(e){setImgs(function(p){return [...p,{src:e.target.result,id:Date.now()+Math.random()}];});};r.readAsDataURL(f);});}
+  useEffect(function(){function onP(e){var it=e.clipboardData&&e.clipboardData.items;if(!it)return;for(var i=0;i<it.length;i++)if(it[i].type.startsWith('image/')){var f=it[i].getAsFile();if(f){var r=new FileReader();r.onload=function(ev){setImgs(function(p){return [...p,{src:ev.target.result,id:Date.now()+Math.random()}];});};r.readAsDataURL(f);}}}window.addEventListener('paste',onP);return function(){window.removeEventListener('paste',onP);};},[]);
+  return <div>
+    <input ref={ref} type="file" accept="image/*" multiple style={{display:'none'}} onChange={function(e){handle(e.target.files);e.target.value='';}}/>
+    {!imgs.length?<div onClick={function(){ref.current.click();}} style={{border:'2px dashed '+C.line,borderRadius:14,padding:'24px 0',textAlign:'center',cursor:'pointer',marginBottom:14,background:'rgba(255,255,255,.3)'}}>
+      <Ic n="img" s={26} c={C.sub} st={{margin:'0 auto 7px'}}/>
+      <div style={{fontSize:13,color:C.sub}}>点击上传图片</div>
+      <div style={{fontSize:11,color:C.sub,opacity:.6,marginTop:2}}>或 Ctrl+V 粘贴</div>
+    </div>:<div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:7,marginBottom:14}}>
+      {imgs.map(function(img,i){return <div key={img.id} style={{position:'relative',borderRadius:12,overflow:'hidden',aspectRatio:'1'}}><img src={img.src} style={{width:'100%',height:'100%',objectFit:'cover'}}/><button onClick={function(){setImgs(function(p){return p.filter(function(_,j){return j!==i;});});}} style={{position:'absolute',top:4,right:4,background:'rgba(20,20,20,.55)',color:'#fff',border:'none',borderRadius:'50%',width:22,height:22,cursor:'pointer',fontSize:14,fontWeight:700}}>×</button></div>;})}
+      <div onClick={function(){ref.current.click();}} style={{borderRadius:12,border:'2px dashed '+C.line,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',aspectRatio:'1',cursor:'pointer',gap:4}}><Ic n="plus" s={18} c={C.sub}/><span style={{fontSize:10,color:C.sub}}>添加</span></div>
+    </div>}
+  </div>;
+}
+
+function CardDet({card,onClose,onSave,onDel}){
+  var [d,setD]=useState(Object.assign({},card,{imgs:(card.imgs||[]).map(function(x,i){return typeof x==='string'?{src:x,id:i}:x;})}));
+  var cc=CATS[d.cat];
+  return <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:300,background:'rgba(20,20,20,.48)',backdropFilter:'blur(12px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+    <div onClick={function(e){e.stopPropagation();}} style={{width:'100%',maxWidth:420,background:'#FAF8F2',borderRadius:28,boxShadow:'0 24px 64px rgba(20,20,20,.18)',overflow:'hidden',maxHeight:'92vh',overflowY:'auto'}}>
+      <div style={{background:cc.bg,padding:'22px 22px 18px',display:'flex',gap:12,alignItems:'flex-start'}}>
+        <CD cat={d.cat} size={46}/>
+        <div style={{flex:1,minWidth:0}}>
+          <CT cat={d.cat}/>
+          <div className="serif" style={{fontSize:22,fontWeight:500,marginTop:8,lineHeight:1.2,letterSpacing:-.5,wordBreak:'break-all'}}>{d.name||'未命名'}</div>
+          {d.hours&&<div style={{display:'flex',alignItems:'center',gap:3,marginTop:4}}><Ic n="clock" s={11} c={C.sub}/><span style={{fontSize:11,color:C.sub}}>{d.hours}</span></div>}
+        </div>
+        <div style={{display:'flex',gap:6,flexShrink:0}}>
+          <button onClick={function(){onDel(d.id);onClose();}} style={{width:32,height:32,borderRadius:10,background:'rgba(255,255,255,.65)',border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><Ic n="trash" s={13} c={C.sub}/></button>
+          <button onClick={onClose} style={{width:32,height:32,borderRadius:10,background:'rgba(255,255,255,.65)',border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><Ic n="x" s={13} c={C.sub}/></button>
+        </div>
+      </div>
+      <div style={{padding:'18px 22px 24px'}}>
+        <FL t="名称"/><TF v={d.name} set={function(v){setD(function(p){return {...p,name:v};});}} ph="输入名称"/>
+        <FL t="营业时间"/><TF v={d.hours||''} set={function(v){setD(function(p){return {...p,hours:v};});}} ph="10:00-22:00"/>
+        <FL t="备注"/><TF v={d.note||''} set={function(v){setD(function(p){return {...p,note:v};});}} ph="添加备注..." ta={true} mb={14}/>
+        <FL t="分类"/>
+        <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:14}}>
+          {CATKEYS.map(function(k){var c2=CATS[k];return <button key={k} onClick={function(){setD(function(p){return {...p,cat:k};});}} className="cat-btn" style={{border:d.cat===k?'1.5px solid '+c2.fg:'1px solid '+C.line,background:d.cat===k?c2.bg:'rgba(255,255,255,.5)',color:d.cat===k?c2.fg:C.sub,fontWeight:d.cat===k?600:400}}><Ic n={k} s={10} c={d.cat===k?c2.fg:C.sub}/>{c2.label}</button>;})}
+        </div>
+        <FL t="图片"/>
+        <ImgUp imgs={d.imgs} setImgs={function(v){setD(function(p){return {...p,imgs:typeof v==='function'?v(p.imgs):v};});}}/>
+        <button onClick={function(){onSave({...d,imgs:d.imgs.map(function(x){return typeof x==='string'?x:x.src;})});onClose();}} style={{width:'100%',background:C.ink,color:'#fff',border:'none',borderRadius:14,padding:'15px 0',fontSize:14,fontWeight:600,cursor:'pointer',letterSpacing:1}}>保存</button>
+      </div>
+    </div>
+  </div>;
+}
+
+function Slot({day,sid,cards,isOver,onExtOver,onExtLeave,onExtDrop,onTap,onRm,onReorder}){
+  var m=SLOTS[sid];
+  var [hovIdx,setHov]=useState(null);
+  var dragIdx=useRef(null);
+  var ghost=useRef(null);
+  var startPos=useRef({x:0,y:0,moved:false});
+
+  function pointerDown(e,idx){
+    if(e.pointerType==='mouse'&&e.button!==0)return;
+    try{e.currentTarget.setPointerCapture(e.pointerId);}catch(_){}
+    var el=e.currentTarget;
+    var rect=el.getBoundingClientRect();
+    startPos.current={x:e.clientX,y:e.clientY,moved:false,rect:rect,el:el,idx:idx,pointerId:e.pointerId};
+    var lastHov=null;
+    function move(ev){
+      var dx=ev.clientX-startPos.current.x,dy=ev.clientY-startPos.current.y;
+      if(!startPos.current.moved){
+        if(Math.abs(dx)<6&&Math.abs(dy)<6)return;
+        startPos.current.moved=true;
+        dragIdx.current=startPos.current.idx;
+        var g=startPos.current.el.cloneNode(true);
+        g.style.cssText='position:fixed;left:'+startPos.current.rect.left+'px;top:'+startPos.current.rect.top+'px;width:'+startPos.current.rect.width+'px;opacity:.85;pointer-events:none;z-index:9999;border-radius:13px;box-shadow:0 14px 38px rgba(0,0,0,.22);transform:scale(1.03);';
+        document.body.appendChild(g);
+        ghost.current=g;
+        document.body.style.overflow='hidden';
+      }
+      if(ghost.current){ghost.current.style.left=(startPos.current.rect.left+dx)+'px';ghost.current.style.top=(startPos.current.rect.top+dy)+'px';}
+      var items=document.querySelectorAll('[data-slot="'+day+'-'+sid+'"] [data-ci]');
+      var found=null;
+      for(var i=0;i<items.length;i++){
+        var el2=items[i];
+        if(+el2.dataset.ci===startPos.current.idx)continue;
+        var r2=el2.getBoundingClientRect(),mid=r2.top+r2.height/2,ci=+el2.dataset.ci;
+        if(ev.clientY>=r2.top-8&&ev.clientY<mid){found=ci;break;}
+        if(ev.clientY>=mid&&ev.clientY<=r2.bottom+8){found=ci+1;break;}
+      }
+      if(found!==lastHov){lastHov=found;setHov(found);}
+    }
+    function up(){
+      el.removeEventListener('pointermove',move);
+      el.removeEventListener('pointerup',up);
+      el.removeEventListener('pointercancel',up);
+      document.body.style.overflow='';
+      try{el.releasePointerCapture(startPos.current.pointerId);}catch(_){}
+      if(ghost.current){document.body.removeChild(ghost.current);ghost.current=null;}
+      var fi=startPos.current.idx;
+      if(startPos.current.moved&&lastHov!==null&&lastHov!==fi&&lastHov!==fi+1){
+        var ti=lastHov>fi?lastHov-1:lastHov;
+        onReorder(day,sid,fi,ti);
+      }
+      dragIdx.current=null;setHov(null);startPos.current={x:0,y:0,moved:false};
+    }
+    el.addEventListener('pointermove',move);
+    el.addEventListener('pointerup',up);
+    el.addEventListener('pointercancel',up);
+  }
+
+  return <div data-slot={day+'-'+sid} style={{marginBottom:12}}
+    onDragOver={function(e){e.preventDefault();if(dragIdx.current===null)onExtOver(sid);}}
+    onDragLeave={function(e){if(!e.currentTarget.contains(e.relatedTarget)){onExtLeave();setHov(null);}}}
+    onDrop={function(e){e.preventDefault();if(dragIdx.current===null)onExtDrop(e,{day,slot:sid});}}>
+    <div style={{background:C.white,borderRadius:22,overflow:'hidden',border:'1.5px '+(isOver?'solid':'dashed')+' '+(isOver?C.sageD:C.line),transition:'all .15s',boxShadow:isOver?'0 6px 20px rgba(78,115,82,.12)':'0 1px 4px rgba(20,20,20,.03)'}}>
+      <div style={{padding:'13px 16px',display:'flex',alignItems:'center',gap:11,background:isOver?C.sageL:'transparent',borderBottom:cards.length?'1px solid '+C.line:'none'}}>
+        <div className="serif" style={{fontSize:22,lineHeight:1,color:isOver?C.sageD:C.sub,width:24,textAlign:'center'}}>{m.sym}</div>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:600,fontSize:14,letterSpacing:-.2}}>{m.label}</div>
+          <div style={{fontSize:10,color:C.sub,marginTop:1,letterSpacing:.3}}>{m.time}</div>
+        </div>
+        {cards.length>0&&<span className="serif" style={{background:C.sageD,color:'#fff',borderRadius:99,padding:'2px 10px',fontSize:11,fontWeight:700}}>{cards.length}</span>}
+      </div>
+      <div style={{padding:cards.length?'10px 11px':'16px 11px',minHeight:52}}>
+        {!cards.length?<div style={{fontSize:12,color:C.subL,textAlign:'center',fontStyle:'italic'}}>拖入卡片安排时段</div>:
+        <div>
+          {cards.map(function(card,idx){
+            var cc=CATS[card.cat];
+            var showLine=hovIdx===idx&&dragIdx.current!==null&&dragIdx.current!==idx;
+            return <div key={card.id}>
+              {showLine&&<div style={{height:3,background:C.sageD,borderRadius:2,margin:'4px 6px',boxShadow:'0 0 8px rgba(78,115,82,.4)'}}/>}
+              <div data-ci={idx} className="drag-card" onPointerDown={function(e){pointerDown(e,idx);}} style={{background:cc.bg,borderRadius:13,padding:'10px 12px',display:'flex',alignItems:'center',gap:9,cursor:'grab',marginBottom:5,opacity:dragIdx.current===idx?.25:1}}>
+                <div style={{opacity:.4}}><Ic n="grip" s={14} c={cc.fg}/></div>
+                <CD cat={card.cat} size={30}/>
+                <div style={{flex:1,minWidth:0}} onClick={function(){onTap(card);}}>
+                  <div style={{fontWeight:600,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{card.name}</div>
+                  {card.hours&&<div style={{fontSize:10,color:C.sub,marginTop:1}}>{card.hours}</div>}
+                </div>
+                <CT cat={card.cat} sm={true}/>
+                <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                  <button onPointerDown={function(e){e.stopPropagation();}} onClick={function(e){e.stopPropagation();if(idx>0)onReorder(day,sid,idx,idx-1);}} style={{background:idx>0?'rgba(255,255,255,.8)':'rgba(255,255,255,.3)',border:'none',borderRadius:6,width:22,height:18,cursor:idx>0?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center'}}><Ic n="up" s={10} c={idx>0?C.sub:'#ccc'}/></button>
+                  <button onPointerDown={function(e){e.stopPropagation();}} onClick={function(e){e.stopPropagation();if(idx<cards.length-1)onReorder(day,sid,idx,idx+1);}} style={{background:idx<cards.length-1?'rgba(255,255,255,.8)':'rgba(255,255,255,.3)',border:'none',borderRadius:6,width:22,height:18,cursor:idx<cards.length-1?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center'}}><Ic n="down" s={10} c={idx<cards.length-1?C.sub:'#ccc'}/></button>
+                </div>
+                <button onPointerDown={function(e){e.stopPropagation();}} onClick={function(e){e.stopPropagation();onRm(day,sid,card.id);}} style={{background:'rgba(255,255,255,.8)',border:'none',borderRadius:'50%',width:22,height:22,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Ic n="x" s={10} c={C.sub}/></button>
+              </div>
+            </div>;
+          })}
+          {hovIdx===cards.length&&dragIdx.current!==null&&<div style={{height:3,background:C.sageD,borderRadius:2,margin:'4px 6px',boxShadow:'0 0 8px rgba(78,115,82,.4)'}}/>}
+        </div>}
+      </div>
+    </div>
+  </div>;
+}
+
+function exportImg(trip,plans,cards,showToast){
+  var SMAP={morning:{l:'上午',t:'08:00 - 12:00',ic:'☼'},afternoon:{l:'下午',t:'12:00 - 18:00',ic:'☉'},evening:{l:'晚间',t:'18:00 - 22:00',ic:'☾'}};
+  var daysArr=[];for(var i=1;i<=trip.days;i++)daysArr.push('Day '+i);
+  var w=document.createElement('div');
+  w.style.cssText='position:fixed;left:-9999px;top:0;width:420px;font-family:"Noto Serif SC",serif;color:#1A1A1A;';
+  var outer=document.createElement('div');
+  outer.style.cssText='background:linear-gradient(180deg,#F2EFE8 0%,#FAF8F2 50%,#F2EFE8 100%);background-image:radial-gradient(rgba(78,115,82,.08) .8px,transparent .8px),linear-gradient(180deg,#F2EFE8 0%,#FAF8F2 50%,#F2EFE8 100%);background-size:14px 14px,100% 100%;padding:36px 26px 40px;position:relative;overflow:hidden';
+  w.appendChild(outer);
+  var b1=document.createElement('div');b1.style.cssText='position:absolute;top:-60px;right:-50px;width:200px;height:200px;border-radius:60% 40% 50% 60%/50% 60% 40% 50%;background:#E5EFE6;opacity:.55';outer.appendChild(b1);
+  var b2=document.createElement('div');b2.style.cssText='position:absolute;bottom:40px;left:-40px;width:140px;height:140px;border-radius:50% 50% 40% 60%;background:#F0E8D8;opacity:.4';outer.appendChild(b2);
+  var hd=document.createElement('div');
+  hd.style.cssText='position:relative;z-index:1;padding-bottom:22px;margin-bottom:24px;border-bottom:1.5px dashed #D0CCC0';
+  hd.innerHTML='<div style="font-size:10px;letter-spacing:3px;color:#8BB08E;font-weight:700;margin-bottom:10px;font-family:Inter,sans-serif">TRAVEL · ITINERARY</div><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px"><div><div style="font-size:30px;font-weight:500;letter-spacing:-1.2px;line-height:1.1">'+trip.name+'</div><div style="font-size:12px;color:#8E8E88;margin-top:8px">'+(trip.date||'日期未定')+' · '+trip.days+'天</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:24px;font-weight:400;color:#4E7352;line-height:1">策行</div><div style="font-size:8px;color:#B8B8B0;margin-top:5px;letter-spacing:2px;font-family:Inter,sans-serif">CEXING · TRAVEL</div></div></div>';
+  outer.appendChild(hd);
+  var tc=0;daysArr.forEach(function(d){['morning','afternoon','evening'].forEach(function(s){tc+=((plans[d]||{})[s]||[]).length;});});
+  var st=document.createElement('div');
+  st.style.cssText='position:relative;z-index:1;display:flex;gap:9px;margin-bottom:26px';
+  st.innerHTML='<div style="flex:1;background:white;border-radius:14px;padding:13px 14px;border:1px solid #E6E2D8"><div style="font-size:9px;color:#8E8E88;letter-spacing:1px;font-weight:600;font-family:Inter">DAYS</div><div style="font-size:26px;font-weight:500;color:#4E7352;letter-spacing:-.8px;margin-top:2px">'+trip.days+'</div></div><div style="flex:1;background:white;border-radius:14px;padding:13px 14px;border:1px solid #E6E2D8"><div style="font-size:9px;color:#8E8E88;letter-spacing:1px;font-weight:600;font-family:Inter">PLANNED</div><div style="font-size:26px;font-weight:500;color:#4E7352;letter-spacing:-.8px;margin-top:2px">'+tc+'</div></div><div style="flex:1;background:white;border-radius:14px;padding:13px 14px;border:1px solid #E6E2D8"><div style="font-size:9px;color:#8E8E88;letter-spacing:1px;font-weight:600;font-family:Inter">BACKPACK</div><div style="font-size:26px;font-weight:500;color:#4E7352;letter-spacing:-.8px;margin-top:2px">'+cards.length+'</div></div>';
+  outer.appendChild(st);
+  daysArr.forEach(function(day,di){
+    var all=[];['morning','afternoon','evening'].forEach(function(s){all=all.concat((plans[day]||{})[s]||[]);});
+    if(!all.length)return;
+    var dw=document.createElement('div');dw.style.cssText='position:relative;z-index:1;margin-bottom:24px';
+    var dh=document.createElement('div');dh.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:14px';
+    dh.innerHTML='<div style="width:38px;height:38px;border-radius:12px;background:#4E7352;color:white;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">'+(di+1)+'</div><div style="font-size:17px;font-weight:500;letter-spacing:-.3px">Day '+(di+1)+'</div><div style="flex:1;height:1px;background-image:linear-gradient(90deg,transparent 50%,#D0CCC0 50%);background-size:8px 1px"></div><div style="font-size:10px;color:#8E8E88;letter-spacing:1px;font-family:Inter">'+all.length+' ITEMS</div>';
+    dw.appendChild(dh);
+    ['morning','afternoon','evening'].forEach(function(s){
+      var sc=(plans[day]||{})[s]||[];if(!sc.length)return;
+      var sw=document.createElement('div');sw.style.cssText='background:white;border-radius:16px;padding:12px 14px;margin-bottom:8px;border:1px solid #E6E2D8';
+      var sl=document.createElement('div');sl.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:8px';
+      sl.innerHTML='<span style="font-size:16px;color:#4E7352">'+SMAP[s].ic+'</span><span style="font-size:12px;font-weight:600">'+SMAP[s].l+'</span><span style="font-size:9px;color:#B8B8B0;letter-spacing:1px;font-family:Inter">'+SMAP[s].t+'</span>';
+      sw.appendChild(sl);
+      sc.forEach(function(c,idx){
+        var cc=CATS[c.cat];
+        var it=document.createElement('div');
+        it.style.cssText='display:flex;align-items:center;gap:9px;padding:8px 11px;background:'+cc.bg+';border-radius:10px;margin-top:'+(idx>0?'5px':'0');
+        it.innerHTML='<div style="width:6px;height:6px;border-radius:50%;background:'+cc.fg+';flex-shrink:0"></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#1A1A1A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+c.name+'</div>'+(c.note?'<div style="font-size:10px;color:#8E8E88;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+c.note+'</div>':'')+'</div><span style="font-size:9px;color:'+cc.fg+';font-weight:600;background:white;padding:2px 8px;border-radius:99px;white-space:nowrap">'+cc.label+'</span>'+(c.hours?'<span style="font-size:10px;color:#8E8E88;white-space:nowrap;font-family:Inter">'+c.hours+'</span>':'');
+        sw.appendChild(it);
+      });
+      dw.appendChild(sw);
+    });
+    outer.appendChild(dw);
+  });
+  var ft=document.createElement('div');
+  ft.style.cssText='position:relative;z-index:1;margin-top:26px;padding:18px 0 6px;border-top:1.5px dashed #D0CCC0;display:flex;justify-content:space-between;align-items:center';
+  ft.innerHTML='<div style="font-size:10px;color:#B8B8B0">由 <span style="color:#4E7352;font-weight:600">策行</span> 生成 · '+new Date().toLocaleDateString('zh-CN')+'</div><div style="display:inline-block;padding:3px 9px;border:1.5px solid #4E7352;border-radius:4px;color:#4E7352;font-size:9px;font-weight:700;letter-spacing:2px;transform:rotate(-2deg);background:rgba(255,255,255,.6);font-family:Inter">CEXING</div>';
+  outer.appendChild(ft);
+  document.body.appendChild(w);
+  if(window.html2canvas){
+    html2canvas(w,{scale:2,backgroundColor:null,useCORS:true,logging:false}).then(function(canvas){
+      document.body.removeChild(w);
+      canvas.toBlob(function(blob){
+        var url=URL.createObjectURL(blob);var a=document.createElement('a');
+        a.href=url;a.download=trip.name+'_策行.png';document.body.appendChild(a);a.click();document.body.removeChild(a);
+        URL.revokeObjectURL(url);if(showToast)showToast('长图已保存');
+      },'image/png');
+    }).catch(function(){document.body.removeChild(w);if(showToast)showToast('导出失败');});
+  }else{document.body.removeChild(w);if(showToast)showToast('图片库未加载');}
+}
+
+function Login({go}){
+  return <div style={{minHeight:'100vh',background:C.bg,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 24px',position:'relative',overflow:'hidden'}}>
+    <div style={{position:'fixed',width:320,height:290,top:-90,right:-70,background:'#F0E8D0',borderRadius:'60% 40% 50% 60%/50% 60% 40% 50%',opacity:.7,pointerEvents:'none'}}/>
+    <div style={{position:'fixed',width:240,height:240,bottom:-70,left:'10%',background:'#D8ECD8',borderRadius:'50% 50% 40% 60%/40% 60% 50% 50%',opacity:.7,pointerEvents:'none'}}/>
+    <div style={{position:'fixed',width:200,height:220,top:'42%',right:-40,background:'#D0DCEC',borderRadius:'60% 40% 60% 40%/50%',opacity:.55,pointerEvents:'none'}}/>
+    <div style={{position:'fixed',width:170,height:180,top:'28%',left:-40,background:'#E8D8E4',borderRadius:'50% 50% 60% 40%',opacity:.5,pointerEvents:'none'}}/>
+    <div style={{position:'fixed',width:140,height:150,bottom:'10%',right:'18%',background:'#F0E0D0',borderRadius:'40% 60% 50% 50%',opacity:.45,pointerEvents:'none'}}/>
+    <div style={{position:'relative',zIndex:2,width:'100%',maxWidth:360}}>
+      <div style={{background:'rgba(252,250,245,.94)',backdropFilter:'blur(28px)',borderRadius:30,border:'1px solid rgba(255,255,255,.9)',boxShadow:'0 24px 64px rgba(20,20,20,.06)',padding:'54px 36px 40px',textAlign:'center'}}>
+        <div className="serif" style={{fontSize:80,fontWeight:500,letterSpacing:-5,color:C.ink,lineHeight:1}}>策<span style={{color:C.sage,fontWeight:500}}>行</span></div>
+        <svg width="140" height="14" viewBox="0 0 140 14" style={{display:'block',margin:'16px auto 0'}}>
+          <circle cx="6" cy="7" r="3" fill={C.sage} opacity=".55"/>
+          <path d="M10 7 Q40 3 70 7 Q100 11 130 7" stroke={C.sage} strokeWidth="1.6" fill="none" strokeLinecap="round" opacity=".55"/>
+          <circle cx="134" cy="7" r="3" fill={C.sage} opacity=".55"/>
+        </svg>
+        <div className="serif" style={{fontSize:16,color:C.sub,marginTop:28,lineHeight:2,letterSpacing:1}}>和朋友把每一次旅行<br/>安排得明明白白</div>
+        <button onClick={go} style={{width:'100%',background:C.ink,color:'#fff',border:'none',borderRadius:16,padding:'17px 0',fontSize:16,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:10,marginTop:36,letterSpacing:2}}>
+          <Ic n="plane" s={18} c="#fff"/>开始规划
+        </button>
+        <div style={{marginTop:18,fontSize:12,color:C.subL,letterSpacing:.5}}>行程码分享 · 无需注册</div>
+      </div>
+    </div>
+  </div>;
+}
+
+function Home({trips,enter,create,importTrip}){
+  var [showImp,setShowImp]=useState(false);
+  var [impCode,setImpCode]=useState('');
+  var [impErr,setImpErr]=useState('');
+  function tryImport(){var d=dec(impCode);if(!d){setImpErr('行程码无效');return;}importTrip(d);setShowImp(false);setImpCode('');setImpErr('');}
+  return <div style={{minHeight:'100vh',background:C.bg}}>
+    {showImp&&<Modal onClose={function(){setShowImp(false);}}>
+      <MH title="导入行程" onClose={function(){setShowImp(false);}}/>
+      <div style={{fontSize:13,color:C.sub,marginBottom:14,lineHeight:1.7}}>粘贴旅伴发来的完整行程码，即可导入。</div>
+      <FL t="行程码"/>
+      <textarea value={impCode} onChange={function(e){setImpCode(e.target.value);setImpErr('');}} placeholder="粘贴完整行程码..." rows={5} style={{width:'100%',border:'1px solid '+(impErr?'#C04040':C.line),borderRadius:12,padding:'10px 13px',fontSize:11,background:'rgba(255,255,255,.7)',fontFamily:'monospace',resize:'none',marginBottom:4,boxSizing:'border-box'}}/>
+      {impErr&&<div style={{fontSize:12,color:'#C04040',marginBottom:8}}>{impErr}</div>}
+      <div style={{display:'flex',gap:8,marginTop:4}}>
+        <button onClick={function(){setShowImp(false);}} style={{flex:1,padding:'13px 0',borderRadius:12,border:'none',background:C.bg,cursor:'pointer',fontSize:13,color:C.sub}}>取消</button>
+        <button onClick={tryImport} disabled={!impCode.trim()} style={{flex:2,padding:'13px 0',borderRadius:12,border:'none',background:impCode.trim()?C.ink:'#ccc',color:'#fff',cursor:impCode.trim()?'pointer':'default',fontSize:13,fontWeight:600}}>导入</button>
+      </div>
+    </Modal>}
+    <div className="paper-tex" style={{background:C.white,padding:'52px 22px 26px',borderBottom:'1px solid '+C.line,position:'relative',overflow:'hidden'}}>
+      <div style={{position:'absolute',top:-40,right:-30,width:160,height:160,borderRadius:'60% 40% 50% 50%',background:C.sageL,opacity:.6}}/>
+      <div style={{position:'absolute',bottom:-50,left:-20,width:110,height:110,borderRadius:'50%',background:'#F0E8D0',opacity:.4}}/>
+      <div style={{position:'relative'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:10}}>
+            <div style={{fontSize:11,letterSpacing:2.5,color:C.sageD,fontWeight:700}}>CEXING</div>
+            <div style={{fontSize:9,letterSpacing:1.5,color:C.subL}}>· 策行旅行本</div>
+          </div>
+          <div style={{width:40,height:40,borderRadius:'50%',background:C.sageL,display:'flex',alignItems:'center',justifyContent:'center',border:'1.5px solid #fff',boxShadow:'0 2px 6px rgba(0,0,0,.04)'}}><Ic n="user" s={18} c={C.sageD}/></div>
+        </div>
+        <div className="serif" style={{fontSize:30,fontWeight:500,letterSpacing:-1.2,lineHeight:1.1}}>你好，旅行者</div>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginTop:8}}>
+          <span className="stamp">{trips.length} TRIPS</span>
+          <span style={{fontSize:12,color:C.sub}}>规划中</span>
+        </div>
+      </div>
+    </div>
+    <div style={{padding:'22px 16px'}}>
+      <div style={{display:'flex',gap:10,marginBottom:26}}>
+        <button onClick={create} style={{flex:3,background:C.ink,color:'#fff',border:'none',borderRadius:20,padding:'18px 18px',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:12,boxShadow:'0 6px 20px rgba(20,20,20,.12)',textAlign:'left',position:'relative',overflow:'hidden'}}>
+          <div style={{position:'absolute',top:-20,right:-20,width:90,height:90,borderRadius:'50%',background:'rgba(139,176,142,.18)'}}/>
+          <div style={{width:38,height:38,borderRadius:12,background:'rgba(255,255,255,.14)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,position:'relative'}}><Ic n="plus" s={18} c="#fff"/></div>
+          <div style={{position:'relative'}}><div className="serif" style={{fontSize:15,letterSpacing:-.3}}>创建新行程</div><div style={{fontSize:11,fontWeight:400,opacity:.55,marginTop:3,letterSpacing:.3}}>START A NEW JOURNEY</div></div>
+        </button>
+        <button onClick={function(){setShowImp(true);}} style={{flex:2,background:'#fff',color:C.sageD,border:'1.5px solid '+C.line,borderRadius:20,fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:7,padding:'14px 0'}}>
+          <div style={{width:32,height:32,borderRadius:10,background:C.sageL,display:'flex',alignItems:'center',justifyContent:'center'}}><Ic n="code" s={16} c={C.sageD}/></div>
+          <span style={{fontSize:12}}>导入行程</span>
+        </button>
+      </div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,padding:'0 4px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div style={{width:18,height:1,background:C.sageD}}/>
+          <div style={{fontSize:11,fontWeight:700,color:C.sageD,letterSpacing:2}}>RECENT</div>
+          <div style={{fontSize:11,color:C.subL}}>· 最近行程</div>
+        </div>
+        <div style={{fontSize:11,color:C.subL,display:'flex',alignItems:'center',gap:3}}><Ic n="check" s={11} c={C.subL}/>自动保存</div>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:11}}>
+        {trips.length===0&&<div style={{textAlign:'center',padding:'60px 20px',color:C.sub,background:C.white,borderRadius:20,border:'1.5px dashed '+C.line}}>
+          <div style={{width:60,height:60,borderRadius:20,background:C.sageL,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px'}}><Ic n="compass" s={28} c={C.sageD}/></div>
+          <div className="serif" style={{fontSize:16,fontWeight:500,color:C.ink,letterSpacing:-.3}}>开始你的第一次旅行规划</div>
+          <div style={{fontSize:12,marginTop:6}}>点击上方"创建新行程"</div>
+        </div>}
+        {trips.map(function(trip,ti){return <div key={trip.id} onClick={function(){enter(trip);}} style={{background:C.white,borderRadius:20,overflow:'hidden',cursor:'pointer',boxShadow:'0 2px 8px rgba(20,20,20,.04)'}}>
+          <div style={{height:5,background:trip.color,opacity:.85}}/>
+          <div style={{padding:'16px 18px',display:'flex',alignItems:'center',gap:13}}>
+            <div className="serif" style={{width:52,height:52,borderRadius:15,background:trip.color+'22',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:22,fontWeight:500,color:trip.color,letterSpacing:-.5}}>0{ti+1}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div className="serif" style={{fontSize:17,fontWeight:500,letterSpacing:-.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{trip.name}</div>
+              <div style={{fontSize:12,color:C.sub,marginTop:4,letterSpacing:.3}}>{trip.date||'未设置日期'} <span style={{color:C.subL,margin:'0 6px'}}>/</span> {trip.days} 天</div>
+            </div>
+            <Ic n="fwd" s={16} c={C.sub}/>
+          </div>
+        </div>;})}
+      </div>
+      <div style={{textAlign:'center',marginTop:40,paddingBottom:20}}>
+        <div style={{display:'inline-flex',alignItems:'center',gap:8,padding:'6px 14px',borderRadius:99,background:'rgba(139,176,142,.1)',border:'1px solid rgba(139,176,142,.2)'}}>
+          <div style={{width:6,height:6,borderRadius:'50%',background:C.sage}}/>
+          <span style={{fontSize:10,color:C.sageD,letterSpacing:1.5,fontWeight:600}}>CEXING · 策行 · TRAVEL PLANNER</span>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+function Planner({bundle,back,onUpdate}){
+  var iTrip=bundle.trip;
+  var [trip,setTrip]=useState(iTrip);
+  function mkDays(n){var a=[];for(var i=1;i<=n;i++)a.push('Day '+i);return a;}
+  var initP={};mkDays(iTrip.days).forEach(function(d){initP[d]=(bundle.plans&&bundle.plans[d])?bundle.plans[d]:{morning:[],afternoon:[],evening:[]};});
+  var [cards,setCards]=useState(bundle.cards||[]);
+  var [plans,setPlans]=useState(initP);
+  var [day,setDay]=useState('Day 1');
+  var [filt,setFilt]=useState('all');
+  var [extId,setExtId]=useState(null);
+  var [dragOver,setDragOver]=useState(null);
+  var [modal,setModal]=useState(null);
+  var [addOpen,setAddOpen]=useState(false);
+  var [ptab,setPtab]=useState('backpack');
+  var [shareOpen,setShareOpen]=useState(false);
+  var [dayEdit,setDayEdit]=useState(false);
+  var [newDays,setNewDays]=useState(iTrip.days);
+  var [addName,setAddName]=useState('');
+  var [addCat,setAddCat]=useState('food');
+  var [addNote,setAddNote]=useState('');
+  var [addHours,setAddHours]=useState('');
+  var [addImgs,setAddImgs]=useState([]);
+  var [tripCode,setTripCode]=useState(null);
+  var [copied,setCopied]=useState(false);
+  var [selectMode,setSelectMode]=useState(false);
+  var [selected,setSelected]=useState([]);
+  var [toast,setToast]=useState(null);
+
+  useEffect(function(){if(onUpdate)onUpdate(trip,cards,plans);},[trip,cards,plans]);
+  useEffect(function(){if(!hasFB)return;var unsub=fbSub(trip.id,function(r){if(r.cards&&JSON.stringify(r.cards)!==JSON.stringify(cards))setCards(r.cards);if(r.plans&&JSON.stringify(r.plans)!==JSON.stringify(plans))setPlans(r.plans);});return unsub;},[trip.id]);
+  useEffect(function(){if(hasFB)fbSave(trip.id,{trip:trip,cards:cards,plans:plans,updatedAt:Date.now()});},[trip,cards,plans]);
+
+  var daysArr=mkDays(trip.days);
+  var curPlan=plans[day]||{morning:[],afternoon:[],evening:[]};
+  var usedToday=[];['morning','afternoon','evening'].forEach(function(s){(curPlan[s]||[]).forEach(function(c){usedToday.push(c.id);});});
+  var filtered=filt==='all'?cards:cards.filter(function(c){return c.cat===filt;});
+
+  function showToast(m){setToast(m);}
+  function adjDays(nd){var nda=mkDays(nd);setPlans(function(p){var n={};nda.forEach(function(d){n[d]=p[d]||{morning:[],afternoon:[],evening:[]};});return n;});setTrip(function(t){return {...t,days:nd};});if(mkDays(nd).indexOf(day)===-1)setDay('Day '+nd);setDayEdit(false);}
+  function extDrop(e,t){if(!extId)return;var card=null;for(var i=0;i<cards.length;i++)if(cards[i].id===extId){card=cards[i];break;}if(!card)return;setPlans(function(p){var n=JSON.parse(JSON.stringify(p));var found=false;(n[t.day][t.slot]||[]).forEach(function(c){if(c.id===extId)found=true;});if(!found)n[t.day][t.slot]=[...(n[t.day][t.slot]||[]),card];return n;});setExtId(null);setDragOver(null);}
+  function reorder(d,s,fi,ti){setPlans(function(p){var n=JSON.parse(JSON.stringify(p));var a=n[d][s].slice();var m=a.splice(fi,1)[0];a.splice(ti,0,m);n[d][s]=a;return n;});}
+  function rm(d,s,id){setPlans(function(p){var n=JSON.parse(JSON.stringify(p));n[d][s]=n[d][s].filter(function(c){return c.id!==id;});return n;});}
+  function saveCard(u){setCards(function(p){return p.map(function(c){return c.id===u.id?u:c;});});setPlans(function(p){var n=JSON.parse(JSON.stringify(p));Object.keys(n).forEach(function(d){Object.keys(n[d]).forEach(function(s){n[d][s]=n[d][s].map(function(c){return c.id===u.id?u:c;});});});return n;});}
+  function delCard(id){setCards(function(p){return p.filter(function(c){return c.id!==id;});});setPlans(function(p){var n=JSON.parse(JSON.stringify(p));Object.keys(n).forEach(function(d){Object.keys(n[d]).forEach(function(s){n[d][s]=n[d][s].filter(function(c){return c.id!==id;});});});return n;});}
+  function addCard(){if(!addName.trim())return;setCards(function(p){return [...p,{id:'c'+Date.now(),name:addName.trim(),cat:addCat,note:addNote,hours:addHours,imgs:addImgs.map(function(x){return x.src||x;})}];});setAddName('');setAddCat('food');setAddNote('');setAddHours('');setAddImgs([]);setAddOpen(false);showToast('已加入背包');}
+  function genCode(){var code=enc(trip,plans,cards);if(code){setTripCode(code);setCopied(false);}else showToast('生成失败');}
+  function copyCode(){if(!tripCode)return;var d=function(){setCopied(true);showToast('已复制');setTimeout(function(){setCopied(false);},2500);};if(navigator.clipboard)navigator.clipboard.writeText(tripCode).then(d);else{var ta=document.createElement('textarea');ta.value=tripCode;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);d();}}
+  function copyFBLink(){var url=window.location.origin+window.location.pathname+'?trip='+trip.id;if(navigator.clipboard)navigator.clipboard.writeText(url).then(function(){showToast('链接已复制');});}
+  function doExport(){showToast('正在生成长图...');setTimeout(function(){exportImg(trip,plans,cards,showToast);},100);}
+  function toggleSel(id){setSelected(function(p){return p.indexOf(id)!==-1?p.filter(function(i){return i!==id;}):[...p,id];});}
+  function batchAddTo(sid){setPlans(function(p){var n=JSON.parse(JSON.stringify(p));selected.forEach(function(cid){var card=cards.find(function(c){return c.id===cid;});if(!card)return;if(!(n[day][sid]||[]).find(function(c){return c.id===cid;}))n[day][sid]=[...(n[day][sid]||[]),card];});return n;});showToast('已加入 '+selected.length+' 项到 '+SLOTS[sid].label);setSelectMode(false);setSelected([]);}
+
+  return <div style={{minHeight:'100vh',background:C.bg,paddingBottom:selectMode&&selected.length>0?170:90}}>
+    {toast&&<Toast msg={toast} onDone={function(){setToast(null);}}/>}
+    {modal&&<CardDet card={modal} onClose={function(){setModal(null);}} onSave={saveCard} onDel={delCard}/>}
+
+    {addOpen&&<Modal onClose={function(){setAddOpen(false);}}>
+      <MH title="新增卡片" onClose={function(){setAddOpen(false);}}/>
+      <FL t="名称"/><TF v={addName} set={setAddName} ph="名称（必填）"/>
+      <FL t="营业时间"/><TF v={addHours} set={setAddHours} ph="10:00-22:00"/>
+      <FL t="备注"/><TF v={addNote} set={setAddNote} ph="添加备注..." ta={true} mb={13}/>
+      <FL t="分类"/>
+      <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:13}}>
+        {CATKEYS.map(function(k){var cc=CATS[k];return <button key={k} onClick={function(){setAddCat(k);}} className="cat-btn" style={{border:addCat===k?'1.5px solid '+cc.fg:'1px solid '+C.line,background:addCat===k?cc.bg:'rgba(255,255,255,.5)',color:addCat===k?cc.fg:C.sub,fontWeight:addCat===k?600:400}}><Ic n={k} s={10} c={addCat===k?cc.fg:C.sub}/>{cc.label}</button>;})}
+      </div>
+      <FL t="图片"/><ImgUp imgs={addImgs} setImgs={setAddImgs}/>
+      <div style={{display:'flex',gap:8,marginTop:4}}>
+        <button onClick={function(){setAddOpen(false);}} style={{flex:1,padding:'13px 0',borderRadius:12,border:'none',background:C.bg,cursor:'pointer',fontSize:13,color:C.sub}}>取消</button>
+        <button onClick={addCard} disabled={!addName.trim()} style={{flex:2,padding:'13px 0',borderRadius:12,border:'none',background:addName.trim()?C.ink:'#ccc',color:'#fff',cursor:addName.trim()?'pointer':'default',fontSize:13,fontWeight:600}}>加入背包</button>
+      </div>
+    </Modal>}
+
+    {shareOpen&&<Modal onClose={function(){setShareOpen(false);}}>
+      <MH title="分享行程" onClose={function(){setShareOpen(false);}}/>
+      {hasFB?<div style={{background:C.sageL,borderRadius:14,padding:'13px 15px',marginBottom:14}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:C.sageD,marginBottom:6}}><Ic n="cloud" s={12} c={C.sageD}/>云端实时同步已启用</div>
+        <div style={{fontSize:12,color:C.sageD,lineHeight:1.65,marginBottom:8}}>发这个链接给旅伴，双方改动实时同步。</div>
+        <div style={{background:'#fff',borderRadius:9,padding:'9px 11px',fontSize:10,color:C.ink,fontFamily:'monospace',wordBreak:'break-all'}}>{window.location.origin+window.location.pathname+'?trip='+trip.id}</div>
+        <button onClick={copyFBLink} style={{width:'100%',background:C.sageD,border:'none',borderRadius:10,padding:'10px 0',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',marginTop:8,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><Ic n="copy" s={14} c="#fff"/>复制同步链接</button>
+      </div>:<div style={{background:C.sageL,borderRadius:14,padding:'13px 15px',marginBottom:14}}>
+        <div style={{fontSize:12,fontWeight:600,color:C.sageD,marginBottom:3}}>行程码协作</div>
+        <div style={{fontSize:12,color:C.sageD,lineHeight:1.65}}>生成行程码发给旅伴，对方在首页点"导入行程"粘贴即可加入。</div>
+      </div>}
+      <button onClick={genCode} style={{width:'100%',padding:'14px 0',borderRadius:12,border:'none',background:C.ink,color:'#fff',cursor:'pointer',fontSize:14,fontWeight:600,marginBottom:12,letterSpacing:.5}}>生成行程码</button>
+      {tripCode&&<div>
+        <FL t="行程码"/>
+        <div style={{background:C.bg,borderRadius:12,padding:'10px 12px',marginBottom:10}}>
+          <textarea readOnly value={tripCode} rows={4} style={{width:'100%',border:'none',background:'transparent',fontFamily:'monospace',fontSize:9,color:C.ink,resize:'none',lineHeight:1.5}} onFocus={function(e){e.target.select();}}/>
+        </div>
+        <button onClick={copyCode} style={{width:'100%',padding:'13px 0',borderRadius:12,border:'none',background:copied?C.sageL:C.sageD,color:copied?C.sageD:'#fff',cursor:'pointer',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+          <Ic n={copied?'check':'copy'} s={15} c={copied?C.sageD:'#fff'}/>{copied?'已复制到剪贴板':'一键复制行程码'}
+        </button>
+      </div>}
+    </Modal>}
+
+    {dayEdit&&<Modal onClose={function(){setDayEdit(false);}}>
+      <MH title="调整天数" onClose={function(){setDayEdit(false);}}/>
+      <DaySlider v={newDays} set={setNewDays}/>
+      <div style={{display:'flex',gap:8,marginTop:20}}>
+        <button onClick={function(){setDayEdit(false);}} style={{flex:1,padding:'13px 0',borderRadius:12,border:'none',background:C.bg,cursor:'pointer',fontSize:13,color:C.sub}}>取消</button>
+        <button onClick={function(){adjDays(newDays);}} style={{flex:2,padding:'13px 0',borderRadius:12,border:'none',background:C.ink,color:'#fff',cursor:'pointer',fontSize:13,fontWeight:600}}>确认</button>
+      </div>
+    </Modal>}
+
+    <div style={{background:C.white,padding:'48px 16px 0',position:'sticky',top:0,zIndex:50,borderBottom:'1px solid '+C.line}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+        <button onClick={back} style={{width:36,height:36,borderRadius:11,background:C.bg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><Ic n="back" s={17} c={C.ink}/></button>
+        <div style={{flex:1,minWidth:0}}>
+          <div className="serif" style={{fontSize:18,fontWeight:500,letterSpacing:-.4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{trip.name}</div>
+          <div style={{fontSize:11,color:C.sub,marginTop:2,display:'flex',alignItems:'center',gap:5,letterSpacing:.3}}>{trip.date||'日期未定'} · {trip.days}天{hasFB&&<span style={{display:'inline-flex',alignItems:'center',gap:3,color:C.sageD}}>· <Ic n="cloud" s={10} c={C.sageD}/>同步</span>}</div>
+        </div>
+        <button onClick={function(){setShareOpen(true);}} style={{width:36,height:36,borderRadius:11,background:C.bg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><Ic n="share" s={14} c={C.ink}/></button>
+        <button onClick={doExport} style={{width:36,height:36,borderRadius:11,background:C.bg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><Ic n="pic" s={14} c={C.ink}/></button>
+      </div>
+      <div style={{height:3,background:trip.color,margin:'0 -16px',opacity:.6}}/>
+      <div style={{display:'flex'}}>
+        {[['backpack','背包','PACK'],['plan','规划','PLAN']].map(function(item){var act=ptab===item[0];return <button key={item[0]} onClick={function(){setPtab(item[0]);setSelectMode(false);setSelected([]);}} style={{flex:1,padding:'14px 0',border:'none',background:'none',cursor:'pointer',fontWeight:act?700:400,fontSize:14,color:act?C.ink:C.sub,borderBottom:act?'2.5px solid '+C.ink:'2.5px solid transparent'}}>
+          <span className="serif" style={{marginRight:6}}>{item[1]}</span>
+          <span style={{fontSize:9,letterSpacing:1.5,opacity:.6}}>{item[2]}</span>
+        </button>;})}
+      </div>
+    </div>
+
+    <div style={{padding:'16px 14px',maxWidth:500,margin:'0 auto'}}>
+      {ptab==='backpack'&&<div>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:12}}>
+          <div style={{display:'flex',gap:5,overflowX:'auto',flex:1}}>
+            <button onClick={function(){setFilt('all');}} style={{padding:'6px 13px',borderRadius:99,border:'none',background:filt==='all'?C.ink:C.white,color:filt==='all'?'#fff':C.sub,cursor:'pointer',fontSize:12,fontWeight:filt==='all'?600:400,flexShrink:0,whiteSpace:'nowrap'}}>全部 {cards.length}</button>
+            {CATKEYS.map(function(k){var cnt=cards.filter(function(c){return c.cat===k;}).length;if(!cnt)return null;var cc=CATS[k];return <button key={k} onClick={function(){setFilt(k);}} style={{padding:'5px 10px',borderRadius:99,border:filt===k?'1px solid '+cc.fg:'none',background:filt===k?cc.bg:C.white,color:filt===k?cc.fg:C.sub,cursor:'pointer',fontSize:12,fontWeight:filt===k?600:400,flexShrink:0,whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:3}}><Ic n={k} s={10} c={filt===k?cc.fg:C.sub}/>{cc.label} {cnt}</button>;})}
+          </div>
+          {cards.length>0&&<button onClick={function(){setSelectMode(!selectMode);setSelected([]);}} style={{padding:'6px 12px',borderRadius:99,border:'none',background:selectMode?C.sageD:C.white,color:selectMode?'#fff':C.sub,cursor:'pointer',fontSize:12,fontWeight:600,flexShrink:0,display:'flex',alignItems:'center',gap:4}}><Ic n="sel" s={12} c={selectMode?'#fff':C.sub}/>{selectMode?'完成':'多选'}</button>}
+        </div>
+        {!cards.length?<div style={{textAlign:'center',padding:'70px 0',color:C.sub}}>
+          <div style={{width:66,height:66,borderRadius:22,background:C.sageL,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px'}}><Ic n="shop" s={28} c={C.sageD}/></div>
+          <div className="serif" style={{fontSize:16,fontWeight:500,color:C.ink,marginBottom:6}}>背包还是空的</div>
+          <div style={{fontSize:12,letterSpacing:.3}}>点右下角 + 添加想去的地方</div>
+        </div>:
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {filtered.map(function(card){
+            var cc=CATS[card.cat];var used=usedToday.indexOf(card.id)!==-1;var isSel=selected.indexOf(card.id)!==-1;
+            return <div key={card.id} draggable={!selectMode}
+              onDragStart={function(e){if(selectMode)return;setExtId(card.id);e.dataTransfer.setData('cid',card.id);}} onDragEnd={function(){setExtId(null);}}
+              onClick={function(){if(selectMode)toggleSel(card.id);else setModal(card);}}
+              style={{background:isSel?C.sageL:(used?'rgba(255,255,255,.45)':C.white),borderRadius:17,padding:'12px 15px',cursor:selectMode?'pointer':'grab',display:'flex',alignItems:'center',gap:12,opacity:used&&!isSel?.5:1,boxShadow:isSel?'0 0 0 2px '+C.sageD:(used?'none':'0 2px 6px rgba(20,20,20,.04)'),border:'1px solid '+(isSel?'transparent':(used?C.line:'transparent'))}}>
+              {selectMode&&<div style={{width:22,height:22,borderRadius:7,border:'2px solid '+(isSel?C.sageD:C.line),background:isSel?C.sageD:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{isSel&&<Ic n="check" s={12} c="#fff"/>}</div>}
+              <CD cat={card.cat} size={42}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div className="serif" style={{fontWeight:500,fontSize:15,letterSpacing:-.2}}>{card.name}</div>
+                {card.hours&&<div style={{display:'flex',alignItems:'center',gap:3,marginTop:3}}><Ic n="clock" s={10} c={C.sub}/><span style={{fontSize:11,color:C.sub}}>{card.hours}</span></div>}
+                {card.note&&<div style={{fontSize:11,color:C.sub,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{card.note}</div>}
+              </div>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
+                <CT cat={card.cat} sm={true}/>
+                {used&&<span style={{fontSize:9,color:C.sub,letterSpacing:.5}}>已排入</span>}
+              </div>
+            </div>;
+          })}
+        </div>}
+      </div>}
+
+      {ptab==='plan'&&<div>
+        <div style={{display:'flex',gap:5,overflowX:'auto',marginBottom:14,alignItems:'center'}}>
+          {daysArr.map(function(d,di){var cnt=0;['morning','afternoon','evening'].forEach(function(s){cnt+=(plans[d]?plans[d][s]:[]).length;});var act=day===d;return <button key={d} onClick={function(){setDay(d);}} style={{padding:'8px 16px',borderRadius:99,border:'none',cursor:'pointer',background:act?C.ink:C.white,color:act?'#fff':C.sub,fontWeight:act?600:400,fontSize:13,flexShrink:0,whiteSpace:'nowrap',boxShadow:act?'0 3px 12px rgba(20,20,20,.14)':'0 1px 3px rgba(0,0,0,.04)',display:'flex',alignItems:'center',gap:6}}>
+            <span className="serif" style={{opacity:.7,fontSize:11}}>0{di+1}</span>
+            {d}
+            {cnt>0&&<span style={{background:act?'rgba(255,255,255,.22)':'rgba(0,0,0,.07)',borderRadius:99,padding:'1px 6px',fontSize:10}}>{cnt}</span>}
+          </button>;})}
+          <button onClick={function(){setNewDays(trip.days);setDayEdit(true);}} style={{flexShrink:0,width:32,height:32,borderRadius:'50%',border:'none',background:C.white,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 1px 3px rgba(0,0,0,.04)'}}><Ic n="edit" s={14} c={C.sub}/></button>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14,padding:'0 4px'}}>
+          <div style={{flex:1}} className="dash-div"/>
+          <span className="stamp">{day.toUpperCase()}</span>
+          <div style={{flex:1}} className="dash-div"/>
+        </div>
+        {['morning','afternoon','evening'].map(function(s){return <Slot key={s} day={day} sid={s} cards={curPlan[s]||[]} isOver={dragOver===s} onExtOver={setDragOver} onExtLeave={function(){setDragOver(null);}} onExtDrop={extDrop} onTap={setModal} onRm={rm} onReorder={reorder}/>;})}
+        <div style={{marginTop:18}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.sub,marginBottom:10,letterSpacing:1.5,display:'flex',alignItems:'center',gap:6}}>
+            <div style={{width:18,height:1,background:C.sub}}/>背包 · BACKPACK
+          </div>
+          {!cards.length?<div style={{fontSize:12,color:C.sub,opacity:.5,textAlign:'center',padding:'10px 0'}}>先在背包页添加卡片</div>:
+          <div style={{display:'flex',gap:7,overflowX:'auto',paddingBottom:8}}>
+            {cards.map(function(card){var cc=CATS[card.cat];var used=usedToday.indexOf(card.id)!==-1;return <div key={card.id} draggable onDragStart={function(e){setExtId(card.id);e.dataTransfer.setData('cid',card.id);}} onDragEnd={function(){setExtId(null);}} style={{background:used?'rgba(255,255,255,.3)':cc.bg,borderRadius:11,padding:'7px 12px',cursor:'grab',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5,fontSize:12,flexShrink:0,opacity:used?.4:1,border:'1px solid '+(used?C.line:'transparent'),fontWeight:500}}><Ic n={card.cat} s={12} c={used?C.sub:cc.fg}/>{card.name}</div>;})}
+          </div>}
+        </div>
+      </div>}
+    </div>
+
+    {selectMode&&selected.length>0&&<div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:70,background:'rgba(252,250,245,.96)',backdropFilter:'blur(20px)',borderTop:'1px solid '+C.line,padding:'14px 16px 22px',boxShadow:'0 -8px 24px rgba(0,0,0,.06)'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:600}}>已选 <span className="serif" style={{color:C.sageD,fontSize:16}}>{selected.length}</span> 项 → 加入到</div>
+        <button onClick={function(){setSelectMode(false);setSelected([]);}} style={{background:'none',border:'none',color:C.sub,fontSize:12,cursor:'pointer'}}>取消</button>
+      </div>
+      <div style={{display:'flex',gap:6,marginBottom:10,overflowX:'auto'}}>
+        {daysArr.map(function(d){return <button key={d} onClick={function(){setDay(d);}} style={{padding:'7px 13px',borderRadius:99,background:day===d?C.ink:C.white,color:day===d?'#fff':C.sub,cursor:'pointer',fontSize:12,fontWeight:day===d?600:400,flexShrink:0,border:'1px solid '+C.line}}>{d}</button>;})}
+      </div>
+      <div style={{display:'flex',gap:6}}>
+        {['morning','afternoon','evening'].map(function(s){return <button key={s} onClick={function(){batchAddTo(s);}} style={{flex:1,padding:'12px 0',borderRadius:13,border:'none',background:C.sageD,color:'#fff',cursor:'pointer',fontSize:13,fontWeight:600}}>→ {SLOTS[s].label}</button>;})}
+      </div>
+    </div>}
+
+    {!selectMode&&<button onClick={function(){setAddOpen(true);}} style={{position:'fixed',bottom:28,right:20,zIndex:60,background:C.ink,color:'#fff',border:'none',borderRadius:18,width:56,height:56,cursor:'pointer',boxShadow:'0 8px 22px rgba(20,20,20,.22)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <Ic n="plus" s={22} c="#fff"/>
+    </button>}
+  </div>;
+}
+
+function CreateModal({onAdd,onClose}){
+  var [name,setName]=useState('');
+  var [date,setDate]=useState('');
+  var [days,setDays]=useState(3);
+  var COLORS=['#8BB08E','#8899CC','#CC9988','#AA88CC','#C4B868','#88B8CC','#CC8888'];
+  var [color,setColor]=useState('#8BB08E');
+  function doCreate(){var n=name.trim();if(!n)return;var t={id:'t'+Date.now()+'_'+Math.random().toString(36).slice(2,7),name:n,date:date,days:days,color:color,members:1};onAdd(t);}
+  return <Modal onClose={onClose}>
+    <MH title="创建行程" onClose={onClose}/>
+    <FL t="行程名称"/><TF v={name} set={setName} ph="例：杭州三日游"/>
+    <FL t="日期（选填）"/><TF v={date} set={setDate} ph="例：5月1-3日" mb={15}/>
+    <FL t="天数"/><DaySlider v={days} set={setDays}/>
+    <div style={{height:15}}/>
+    <FL t="标签色"/>
+    <div style={{display:'flex',gap:8,marginBottom:4}}>
+      {COLORS.map(function(col){return <button key={col} onClick={function(){setColor(col);}} style={{width:30,height:30,borderRadius:'50%',background:col,border:color===col?'3px solid '+C.ink:'2.5px solid transparent',cursor:'pointer',transform:color===col?'scale(1.1)':'scale(1)'}}/>;})}
+    </div>
+    <div style={{display:'flex',gap:8,marginTop:20}}>
+      <button onClick={onClose} style={{flex:1,padding:'13px 0',borderRadius:12,border:'none',background:C.bg,cursor:'pointer',fontSize:13,color:C.sub}}>取消</button>
+      <button onClick={doCreate} disabled={!name.trim()} style={{flex:2,padding:'13px 0',borderRadius:12,border:'none',background:name.trim()?C.ink:'#ccc',color:'#fff',cursor:name.trim()?'pointer':'default',fontSize:13,fontWeight:600,letterSpacing:.5}}>创建</button>
+    </div>
+  </Modal>;
+}
+
+function App(){
+  var saved=ldLS();
+  var [sc,setSc]=useState('login');
+  var [trips,setTrips]=useState(saved?(saved.trips||[]):[]);
+  var [tripData,setTripData]=useState(saved?(saved.tripData||{}):{});
+  var [cur,setCur]=useState(null);
+  var [createOpen,setCreateOpen]=useState(false);
+
+  useEffect(function(){svLS({trips:trips,tripData:tripData});},[trips,tripData]);
+
+  useEffect(function(){
+    if(!hasFB)return;
+    var params=new URLSearchParams(window.location.search);
+    var tid=params.get('trip');
+    if(tid){
+      fbGet(tid).then(function(data){
+        if(data){
+          setTrips(function(p){var e=p.find(function(t){return t.id===data.trip.id;});return e?p:[data.trip,...p];});
+          setCur({trip:data.trip,cards:data.cards||[],plans:data.plans||null});
+          setSc('planner');
+        }
+      });
+    }
+  },[]);
+
+  function openPlanner(t,iCards,iPlans){
+    setTrips(function(p){var e=p.find(function(x){return x.id===t.id;});return e?p:[t,...p];});
+    var stored=tripData[t.id];
+    setCur({trip:t,cards:(iCards&&iCards.length)?iCards:(stored?stored.cards:[]),plans:iPlans||(stored?stored.plans:null)});
+    setCreateOpen(false);
+    setSc('planner');
+  }
+  function importTrip(data){var t=Object.assign({},data.trip,{id:'t'+Date.now()});openPlanner(t,data.cards||[],data.plans||null);}
+  function updateTripData(trip,cards,plans){setTripData(function(p){return {...p,[trip.id]:{cards:cards,plans:plans}};});setTrips(function(p){return p.map(function(t){return t.id===trip.id?trip:t;});});}
+
+  if(sc==='login')return <Login go={function(){setSc('home');}}/>;
+  if(sc==='planner'&&cur)return <Planner bundle={cur} back={function(){setSc('home');}} onUpdate={updateTripData}/>;
+  return <div>
+    {createOpen&&<CreateModal onAdd={function(t){openPlanner(t,[],null);}} onClose={function(){setCreateOpen(false);}}/>}
+    <Home trips={trips} enter={function(t){openPlanner(t,[],null);}} create={function(){setCreateOpen(true);}} importTrip={importTrip}/>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
