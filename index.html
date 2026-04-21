@@ -40,16 +40,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
 .dash-div{height:1px;background-image:linear-gradient(90deg,transparent 50%,var(--line) 50%);background-size:10px 1px;background-repeat:repeat-x}
 .paper-tex{background-image:repeating-linear-gradient(0deg,transparent 0,transparent 22px,rgba(139,176,142,.04) 22px,rgba(139,176,142,.04) 23px),radial-gradient(rgba(78,115,82,.06) .8px,transparent .8px);background-size:100% 23px,14px 14px}
 </style>
-  <script>
-var _hmt = _hmt || [];
-(function() {
-  var hm = document.createElement("script");
-  hm.src = "https://hm.baidu.com/hm.js?fc3370ae3593a8904db1016b52b2261a";
-  var s = document.getElementsByTagName("script")[0]; 
-  s.parentNode.insertBefore(hm, s);
-})();
-</script>
-
 </head>
 <body>
 <div id="root"></div>
@@ -58,14 +48,7 @@ var _hmt = _hmt || [];
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
-<script>
-// Bmob 后端云配置（用于协同行程。不开启协同的行程只存本地，不上传）
-window.BMOB_CONFIG = {
-  appId: 'd5c9d6148bb456355e37a678ab088a7d',
-  restKey: 'c13a0d14dbcf26c19994117176578e30',
-  baseUrl: 'https://api2.bmob.cc/1/classes'
-};
-</script>
+<script>window.FIREBASE_CONFIG=null;</script>
 <script type="text/babel">
 const {useState,useRef,useEffect}=React;
 const C={bg:"#F2EFE8",white:"#FFF",ink:"#1A1A1A",sub:"#8E8E88",subL:"#B8B8B0",line:"#E6E2D8",sage:"#8BB08E",sageL:"#E5EFE6",sageD:"#4E7352"};
@@ -101,90 +84,10 @@ function fmtDur(h){
   return fmtDurMin(Math.round(h*60));
 }
 
-// ===== Bmob 后端云协同 =====
-// 设计：行程默认只存在本地，点"启用协同"后才上传到 Bmob。
-// 协同凭证 = trip.id 本身（约 25 字符，格式 t + 时间戳 + 随机串），用户复制这串字符给朋友即可
-const hasCloud=typeof window!=='undefined'&&window.BMOB_CONFIG&&window.BMOB_CONFIG.appId;
-// 保留 hasFB 作为别名以兼容现有代码（hasFB 表示"云端能力存在"，但不代表某个行程启用）
-const hasFB=hasCloud;
-const BMOB_CLASS='Trip';
-function bmobHeaders(){
-  var c=window.BMOB_CONFIG;
-  return {
-    'X-Bmob-Application-Id':c.appId,
-    'X-Bmob-REST-API-Key':c.restKey,
-    'Content-Type':'application/json'
-  };
-}
-function bmobQuery(tripId){
-  var c=window.BMOB_CONFIG;
-  var url=c.baseUrl+'/'+BMOB_CLASS+'?where='+encodeURIComponent(JSON.stringify({tripId:tripId}));
-  return fetch(url,{method:'GET',headers:bmobHeaders()}).then(function(r){return r.json();});
-}
-// fbSave: 保存一个行程到 Bmob（upsert by tripId）
-function fbSave(tripId,d){
-  if(!hasCloud||!tripId)return Promise.resolve();
-  var c=window.BMOB_CONFIG;
-  // 公开读写的 ACL（任何人可读写这行数据）
-  var publicACL={"*":{"read":true,"write":true}};
-  var payload={
-    tripId:tripId,
-    data:JSON.stringify(d),
-    updatedAtLocal:d.updatedAt||Date.now(),
-    ACL:publicACL
-  };
-  return bmobQuery(tripId).then(function(r){
-    if(r&&r.results&&r.results.length>0){
-      var oid=r.results[0].objectId;
-      return fetch(c.baseUrl+'/'+BMOB_CLASS+'/'+oid,{
-        method:'PUT',headers:bmobHeaders(),body:JSON.stringify(payload)
-      }).then(function(r){return r.json();});
-    }else{
-      return fetch(c.baseUrl+'/'+BMOB_CLASS,{
-        method:'POST',headers:bmobHeaders(),body:JSON.stringify(payload)
-      }).then(function(r){return r.json();});
-    }
-  }).catch(function(e){console.warn('bmob save failed',e);});
-}
-// fbGet: 用 tripId 拉取远端行程数据
-function fbGet(tripId){
-  if(!hasCloud||!tripId)return Promise.resolve(null);
-  return bmobQuery(tripId).then(function(r){
-    if(r&&r.results&&r.results.length>0){
-      try{return JSON.parse(r.results[0].data);}catch(e){return null;}
-    }
-    return null;
-  }).catch(function(e){console.warn('bmob get failed',e);return null;});
-}
-// fbSub: 5 秒轮询订阅远端更新
-function fbSub(tripId,cb){
-  if(!hasCloud||!tripId)return function(){};
-  var timer=null,stopped=false,lastUpdateAt=0;
-  function poll(){
-    if(stopped)return;
-    fbGet(tripId).then(function(d){
-      if(stopped||!d)return;
-      var remoteTs=d.updatedAt||0;
-      if(remoteTs>lastUpdateAt){
-        lastUpdateAt=remoteTs;
-        cb(d);
-      }
-    }).finally(function(){
-      if(!stopped)timer=setTimeout(poll,5000);
-    });
-  }
-  poll();
-  return function(){stopped=true;if(timer)clearTimeout(timer);};
-}
-function fbDelete(tripId){
-  if(!hasCloud||!tripId)return;
-  bmobQuery(tripId).then(function(r){
-    if(r&&r.results&&r.results.length>0){
-      var oid=r.results[0].objectId;
-      fetch(window.BMOB_CONFIG.baseUrl+'/'+BMOB_CLASS+'/'+oid,{method:'DELETE',headers:bmobHeaders()});
-    }
-  }).catch(function(_){});
-}
+const hasFB=typeof window!=='undefined'&&window._db;
+function fbSave(id,d){if(!hasFB)return;try{window._db.ref('trips/'+id).set(d);}catch(e){}}
+function fbSub(id,cb){if(!hasFB)return function(){};try{var r=window._db.ref('trips/'+id);r.on('value',function(s){var v=s.val();if(v)cb(v);});return function(){r.off();};}catch(e){return function(){};}}
+function fbGet(id){if(!hasFB)return Promise.resolve(null);return window._db.ref('trips/'+id).once('value').then(function(s){return s.val();});}
 
 const LS='cexing_v1';
 function ldLS(){try{var r=localStorage.getItem(LS);return r?JSON.parse(r):null;}catch(e){console.warn('ldLS failed',e);return null;}}
@@ -848,49 +751,14 @@ function Login({go}){
   </div>;
 }
 
-function Home({trips,enter,create,importTrip,importCloudTrip,onDelete}){
+function Home({trips,enter,create,importTrip,onDelete}){
   var [showImp,setShowImp]=useState(false);
   var [impCode,setImpCode]=useState('');
   var [impErr,setImpErr]=useState('');
-  var [impBusy,setImpBusy]=useState(false);
   var [delTarget,setDelTarget]=useState(null); // trip pending deletion
   var lpTimer=useRef(null);
   var lpStart=useRef(null);
-  function tryImport(){
-    var code=impCode.trim();
-    if(!code)return;
-    setImpBusy(true);setImpErr('');
-    // 判断类型：以 't' 开头且不含特殊字符 = 协同码（tripId），否则尝试解码为离线行程码
-    if(/^t\d+_[A-Za-z0-9]+$/.test(code)){
-      // 云端协同码
-      if(!hasCloud){setImpErr('云端协同不可用');setImpBusy(false);return;}
-      // 本地已有这个行程？
-      var existing=trips.find(function(t){return t.id===code;});
-      if(existing){
-        setImpBusy(false);setShowImp(false);setImpCode('');
-        enter(existing);
-        return;
-      }
-      fbGet(code).then(function(d){
-        setImpBusy(false);
-        if(!d||!d.trip){setImpErr('协同码无效或数据未找到');return;}
-        // 确保 cloud 标志开启
-        var cloudTrip=Object.assign({},d.trip,{cloud:true});
-        importCloudTrip({trip:cloudTrip,cards:d.cards||[],plans:d.plans||null});
-        setShowImp(false);setImpCode('');setImpErr('');
-      }).catch(function(e){
-        setImpBusy(false);
-        setImpErr('加载失败，请检查网络');
-      });
-    }else{
-      // 离线行程码
-      var d=dec(code);
-      setImpBusy(false);
-      if(!d){setImpErr('行程码无效');return;}
-      importTrip(d);
-      setShowImp(false);setImpCode('');setImpErr('');
-    }
-  }
+  function tryImport(){var d=dec(impCode);if(!d){setImpErr('行程码无效');return;}importTrip(d);setShowImp(false);setImpCode('');setImpErr('');}
 
   // Sort ascending by createdAt (earliest first), fallback on id
   var sortedTrips=trips.slice().sort(function(a,b){
@@ -926,21 +794,15 @@ function Home({trips,enter,create,importTrip,importCloudTrip,onDelete}){
   }
 
   return <div style={{minHeight:'100vh',background:C.bg,display:'flex',flexDirection:'column'}}>
-    {showImp&&<Modal onClose={function(){if(!impBusy)setShowImp(false);}}>
-      <MH title="导入行程" onClose={function(){if(!impBusy)setShowImp(false);}}/>
-      <div style={{fontSize:12,color:C.sub,marginBottom:12,lineHeight:1.65}}>
-        粘贴旅伴发来的行程码或协同码：
-        <div style={{marginTop:6,fontSize:11,color:C.subL,lineHeight:1.55}}>
-          <div>· <b style={{color:C.sageD}}>协同码</b>（短，如 t1730xxx_abc12）→ 加入云端协同</div>
-          <div>· <b style={{color:C.sub}}>离线行程码</b>（长，Z 开头）→ 创建独立副本</div>
-        </div>
-      </div>
-      <FL t="粘贴码"/>
-      <textarea value={impCode} onChange={function(e){setImpCode(e.target.value);setImpErr('');}} placeholder="粘贴协同码或离线行程码..." rows={4} disabled={impBusy} style={{width:'100%',border:'1px solid '+(impErr?'#C04040':C.line),borderRadius:12,padding:'10px 13px',fontSize:11,background:'rgba(255,255,255,.7)',fontFamily:'monospace',resize:'none',marginBottom:4,boxSizing:'border-box',opacity:impBusy?.6:1}}/>
+    {showImp&&<Modal onClose={function(){setShowImp(false);}}>
+      <MH title="导入行程" onClose={function(){setShowImp(false);}}/>
+      <div style={{fontSize:13,color:C.sub,marginBottom:14,lineHeight:1.7}}>粘贴旅伴发来的完整行程码，即可导入。</div>
+      <FL t="行程码"/>
+      <textarea value={impCode} onChange={function(e){setImpCode(e.target.value);setImpErr('');}} placeholder="粘贴完整行程码..." rows={5} style={{width:'100%',border:'1px solid '+(impErr?'#C04040':C.line),borderRadius:12,padding:'10px 13px',fontSize:11,background:'rgba(255,255,255,.7)',fontFamily:'monospace',resize:'none',marginBottom:4,boxSizing:'border-box'}}/>
       {impErr&&<div style={{fontSize:12,color:'#C04040',marginBottom:8}}>{impErr}</div>}
       <div style={{display:'flex',gap:8,marginTop:4}}>
-        <button onClick={function(){if(!impBusy)setShowImp(false);}} disabled={impBusy} style={{flex:1,padding:'13px 0',borderRadius:12,border:'none',background:C.bg,cursor:impBusy?'default':'pointer',fontSize:13,color:C.sub,opacity:impBusy?.5:1}}>取消</button>
-        <button onClick={tryImport} disabled={!impCode.trim()||impBusy} style={{flex:2,padding:'13px 0',borderRadius:12,border:'none',background:(impCode.trim()&&!impBusy)?C.ink:'#ccc',color:'#fff',cursor:(impCode.trim()&&!impBusy)?'pointer':'default',fontSize:13,fontWeight:600}}>{impBusy?'加载中...':'导入'}</button>
+        <button onClick={function(){setShowImp(false);}} style={{flex:1,padding:'13px 0',borderRadius:12,border:'none',background:C.bg,cursor:'pointer',fontSize:13,color:C.sub}}>取消</button>
+        <button onClick={tryImport} disabled={!impCode.trim()} style={{flex:2,padding:'13px 0',borderRadius:12,border:'none',background:impCode.trim()?C.ink:'#ccc',color:'#fff',cursor:impCode.trim()?'pointer':'default',fontSize:13,fontWeight:600}}>导入</button>
       </div>
     </Modal>}
 
@@ -1016,10 +878,7 @@ function Home({trips,enter,create,importTrip,importCloudTrip,onDelete}){
           <div style={{padding:'16px 18px',display:'flex',alignItems:'center',gap:13}}>
             <div className="serif" style={{width:52,height:52,borderRadius:15,background:trip.color+'22',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:22,fontWeight:500,color:trip.color,letterSpacing:-.5}}>{('0'+(ti+1)).slice(-2)}</div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                <div className="serif" style={{fontSize:17,fontWeight:500,letterSpacing:-.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,minWidth:0}}>{trip.name}</div>
-                {trip.cloud&&<span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:9,color:C.sageD,background:C.sageL,padding:'2px 7px',borderRadius:99,fontWeight:600,letterSpacing:.3,flexShrink:0}}><Ic n="cloud" s={9} c={C.sageD}/>协同</span>}
-              </div>
+              <div className="serif" style={{fontSize:17,fontWeight:500,letterSpacing:-.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{trip.name}</div>
               <div style={{fontSize:12,color:C.sub,marginTop:4,letterSpacing:.3}}>{trip.date||'未设置日期'} <span style={{color:C.subL,margin:'0 6px'}}>/</span> {trip.days} 天</div>
             </div>
             <Ic n="fwd" s={16} c={C.sub}/>
@@ -1074,26 +933,18 @@ function Planner({bundle,back,onUpdate}){
   var [bpGhost,setBpGhost]=useState(null);
 
   useEffect(function(){if(onUpdate)onUpdate(trip,cards,plans);},[trip,cards,plans]);
-  // Cloud sync: only when trip has opted-in (trip.cloud === true)
+  // Firebase sync: track last local save to avoid echo-loop
   var lastLocalUpdate=useRef(0);
+  useEffect(function(){if(!hasFB)return;var unsub=fbSub(trip.id,function(r){
+    // Ignore remote updates that are our own echo (within 1 second)
+    if(r.updatedAt&&r.updatedAt<=lastLocalUpdate.current+500)return;
+    // Apply remote changes
+    if(r.cards&&JSON.stringify(r.cards)!==JSON.stringify(cards))setCards(r.cards);
+    if(r.plans&&JSON.stringify(r.plans)!==JSON.stringify(plans))setPlans(r.plans);
+    if(r.trip&&JSON.stringify(r.trip)!==JSON.stringify(trip))setTrip(r.trip);
+  });return unsub;},[trip.id]);
   useEffect(function(){
-    if(!hasCloud||!trip.cloud)return;
-    var unsub=fbSub(trip.id,function(r){
-      // Ignore remote updates that are our own echo (within 1 second)
-      if(r.updatedAt&&r.updatedAt<=lastLocalUpdate.current+500)return;
-      // Apply remote changes
-      if(r.cards&&JSON.stringify(r.cards)!==JSON.stringify(cards))setCards(r.cards);
-      if(r.plans&&JSON.stringify(r.plans)!==JSON.stringify(plans))setPlans(r.plans);
-      if(r.trip){
-        // Don't overwrite trip.cloud flag from remote (remote might be stale)
-        var merged=Object.assign({},r.trip,{cloud:trip.cloud});
-        if(JSON.stringify(merged)!==JSON.stringify(trip))setTrip(merged);
-      }
-    });
-    return unsub;
-  },[trip.id,trip.cloud]);
-  useEffect(function(){
-    if(hasCloud&&trip.cloud){
+    if(hasFB){
       var ts=Date.now();
       lastLocalUpdate.current=ts;
       fbSave(trip.id,{trip:trip,cards:cards,plans:plans,updatedAt:ts});
@@ -1391,46 +1242,26 @@ function Planner({bundle,back,onUpdate}){
 
     {shareOpen&&<Modal onClose={function(){setShareOpen(false);}}>
       <MH title="分享行程" onClose={function(){setShareOpen(false);}}/>
-
-      {/* 云端协同区块 */}
-      {hasCloud&&<div style={{background:trip.cloud?C.sageL:'rgba(229,239,230,.35)',borderRadius:14,padding:'14px 15px',marginBottom:14,border:'1.5px '+(trip.cloud?'solid':'dashed')+' '+(trip.cloud?C.sageD:C.sage)}}>
-        <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:700,color:C.sageD,marginBottom:8,letterSpacing:.3}}>
-          <Ic n="cloud" s={13} c={C.sageD}/>
-          {trip.cloud?'云端协同已开启':'云端协同（邀请朋友共同编辑）'}
-        </div>
-        {trip.cloud?<div>
-          <div style={{fontSize:11,color:C.sageD,lineHeight:1.6,marginBottom:8,opacity:.85}}>把下面的协同码发给朋友，Ta 在首页点"导入行程"粘贴即可加入。双方改动 5 秒内互相同步。</div>
-          <div style={{background:'#fff',borderRadius:10,padding:'11px 13px',marginBottom:8,border:'1px solid rgba(78,115,82,.2)'}}>
-            <div style={{fontSize:9,color:C.sub,letterSpacing:1.5,fontWeight:600,marginBottom:4}}>CO-EDIT CODE · 协同码</div>
-            <div style={{fontFamily:'monospace',fontSize:13,color:C.ink,wordBreak:'break-all',letterSpacing:.5,fontWeight:600}}>{trip.id}</div>
-          </div>
-          <button onClick={function(){doCopyText(trip.id,'协同码已复制');}} style={{width:'100%',background:C.sageD,border:'none',borderRadius:10,padding:'11px 0',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><Ic n="copy" s={14} c="#fff"/>复制协同码</button>
-        </div>:<div>
-          <div style={{fontSize:11,color:C.sub,lineHeight:1.65,marginBottom:10}}>启用后，行程将同步到云端，生成专属协同码。朋友输入协同码即可和你一起编辑，改动 5 秒内互相可见。</div>
-          <button onClick={function(){
-            if(!window.confirm('开启后行程数据将上传至云端以实现协同，确认继续？'))return;
-            setTrip(function(p){return {...p,cloud:true};});
-            showToast('协同已开启，正在同步到云端...');
-          }} style={{width:'100%',background:C.sageD,border:'none',borderRadius:10,padding:'11px 0',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><Ic n="cloud" s={14} c="#fff"/>启用云端协同</button>
-        </div>}
+      {hasFB?<div style={{background:C.sageL,borderRadius:14,padding:'13px 15px',marginBottom:14}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:C.sageD,marginBottom:6}}><Ic n="cloud" s={12} c={C.sageD}/>云端实时同步已启用</div>
+        <div style={{fontSize:12,color:C.sageD,lineHeight:1.65,marginBottom:8}}>发这个链接给旅伴，双方改动实时同步。</div>
+        <div style={{background:'#fff',borderRadius:9,padding:'9px 11px',fontSize:10,color:C.ink,fontFamily:'monospace',wordBreak:'break-all'}}>{window.location.origin+window.location.pathname+'?trip='+trip.id}</div>
+        <button onClick={copyFBLink} style={{width:'100%',background:C.sageD,border:'none',borderRadius:10,padding:'10px 0',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',marginTop:8,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><Ic n="copy" s={14} c="#fff"/>复制同步链接</button>
+      </div>:<div style={{background:C.sageL,borderRadius:14,padding:'13px 15px',marginBottom:14}}>
+        <div style={{fontSize:12,fontWeight:600,color:C.sageD,marginBottom:3}}>行程码协作</div>
+        <div style={{fontSize:12,color:C.sageD,lineHeight:1.65}}>生成行程码发给旅伴，对方在首页点"导入行程"粘贴即可加入。</div>
       </div>}
-
-      {/* 离线分享区块 */}
-      <div style={{background:C.bg,borderRadius:14,padding:'14px 15px',marginBottom:12}}>
-        <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:6,letterSpacing:.3}}>离线分享（对方会得到一份独立副本）</div>
-        <div style={{fontSize:11,color:C.subL,lineHeight:1.65,marginBottom:10}}>不想开启云同步？可用离线行程码，把整个行程打包分享。对方导入后是独立的一份，互不影响。</div>
-        <button onClick={genCode} style={{width:'100%',padding:'11px 0',borderRadius:10,border:'1px solid '+C.line,background:'#fff',color:C.ink,cursor:'pointer',fontSize:13,fontWeight:600,marginBottom:tripCode?10:0}}>生成离线行程码</button>
-        {tripCode&&<div>
-          <div style={{background:'#fff',borderRadius:10,padding:'10px 12px',marginBottom:8,maxHeight:120,overflow:'auto',border:'1px solid '+C.line}}>
-            <textarea readOnly value={tripCode} rows={4} style={{width:'100%',border:'none',background:'transparent',fontFamily:'monospace',fontSize:9,color:C.ink,resize:'none',lineHeight:1.5}} onFocus={function(e){e.target.select();}}/>
-          </div>
-          <button onClick={copyCode} style={{width:'100%',padding:'11px 0',borderRadius:10,border:'none',background:copied?C.sageL:C.sageD,color:copied?C.sageD:'#fff',cursor:'pointer',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
-            <Ic n={copied?'check':'copy'} s={15} c={copied?C.sageD:'#fff'}/>{copied?'已复制':'复制离线码'}
-          </button>
-        </div>}
-      </div>
-
-      <button onClick={function(){showToast('生成封面图...');setTimeout(function(){genCoverImg(trip,plans,cards,showToast);},100);}} style={{width:'100%',padding:'12px 0',borderRadius:12,border:'1.5px solid '+C.line,background:'transparent',color:C.sub,cursor:'pointer',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><Ic n="pic" s={14} c={C.sub}/>生成分享封面图</button>
+      <button onClick={genCode} style={{width:'100%',padding:'14px 0',borderRadius:12,border:'none',background:C.ink,color:'#fff',cursor:'pointer',fontSize:14,fontWeight:600,marginBottom:10,letterSpacing:.5}}>生成行程码</button>
+      <button onClick={function(){showToast('生成封面图...');setTimeout(function(){genCoverImg(trip,plans,cards,showToast);},100);}} style={{width:'100%',padding:'12px 0',borderRadius:12,border:'1.5px solid '+C.sageD,background:'rgba(229,239,230,.5)',color:C.sageD,cursor:'pointer',fontSize:13,fontWeight:600,marginBottom:12,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><Ic n="pic" s={14} c={C.sageD}/>生成分享封面图</button>
+      {tripCode&&<div>
+        <FL t="行程码"/>
+        <div style={{background:C.bg,borderRadius:12,padding:'10px 12px',marginBottom:10}}>
+          <textarea readOnly value={tripCode} rows={4} style={{width:'100%',border:'none',background:'transparent',fontFamily:'monospace',fontSize:9,color:C.ink,resize:'none',lineHeight:1.5}} onFocus={function(e){e.target.select();}}/>
+        </div>
+        <button onClick={copyCode} style={{width:'100%',padding:'13px 0',borderRadius:12,border:'none',background:copied?C.sageL:C.sageD,color:copied?C.sageD:'#fff',cursor:'pointer',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+          <Ic n={copied?'check':'copy'} s={15} c={copied?C.sageD:'#fff'}/>{copied?'已复制到剪贴板':'一键复制行程码'}
+        </button>
+      </div>}
     </Modal>}
 
     {dayEdit&&<Modal onClose={function(){setDayEdit(false);}}>
@@ -1447,7 +1278,7 @@ function Planner({bundle,back,onUpdate}){
         <button onClick={back} style={{width:36,height:36,borderRadius:11,background:C.bg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><Ic n="back" s={17} c={C.ink}/></button>
         <div style={{flex:1,minWidth:0}}>
           <div className="serif" style={{fontSize:18,fontWeight:500,letterSpacing:-.4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{trip.name}</div>
-          <div style={{fontSize:11,color:C.sub,marginTop:2,display:'flex',alignItems:'center',gap:5,letterSpacing:.3}}>{trip.date||'日期未定'} · {trip.days}天{trip.cloud&&<span style={{display:'inline-flex',alignItems:'center',gap:3,color:C.sageD,fontWeight:600}}>· <Ic n="cloud" s={10} c={C.sageD}/>协同中</span>}</div>
+          <div style={{fontSize:11,color:C.sub,marginTop:2,display:'flex',alignItems:'center',gap:5,letterSpacing:.3}}>{trip.date||'日期未定'} · {trip.days}天{hasFB&&<span style={{display:'inline-flex',alignItems:'center',gap:3,color:C.sageD}}>· <Ic n="cloud" s={10} c={C.sageD}/>同步</span>}</div>
         </div>
         <button onClick={function(){setShareOpen(true);}} style={{width:36,height:36,borderRadius:11,background:C.bg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><Ic n="share" s={14} c={C.ink}/></button>
         <button onClick={doExport} style={{width:36,height:36,borderRadius:11,background:C.bg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><Ic n="pic" s={14} c={C.ink}/></button>
@@ -1666,6 +1497,21 @@ function App(){
 
   useEffect(function(){svLS({trips:trips,tripData:tripData});},[trips,tripData]);
 
+  useEffect(function(){
+    if(!hasFB)return;
+    var params=new URLSearchParams(window.location.search);
+    var tid=params.get('trip');
+    if(tid){
+      fbGet(tid).then(function(data){
+        if(data){
+          setTrips(function(p){var e=p.find(function(t){return t.id===data.trip.id;});return e?p:[data.trip,...p];});
+          setCur({trip:data.trip,cards:data.cards||[],plans:data.plans||null});
+          setSc('planner');
+        }
+      });
+    }
+  },[]);
+
   function openPlanner(t,iCards,iPlans){
     try{
       // Ensure all required fields exist
@@ -1691,32 +1537,20 @@ function App(){
       alert('创建失败：'+(e.message||'未知错误'));
     }
   }
-  // 离线导入：创建独立副本（新 ID，不协同）
-  function importTrip(data){
-    var t=Object.assign({},data.trip,{id:'t'+Date.now(),createdAt:Date.now(),cloud:false});
-    openPlanner(t,data.cards||[],data.plans||null);
-  }
-  // 云端导入：保留原 ID，加入同一个协同房间
-  function importCloudTrip(data){
-    // 保持原 trip.id 不变（这就是协同房间号）
-    var t=Object.assign({},data.trip,{cloud:true});
-    if(!t.createdAt)t.createdAt=Date.now();
-    openPlanner(t,data.cards||[],data.plans||null);
-  }
+  function importTrip(data){var t=Object.assign({},data.trip,{id:'t'+Date.now(),createdAt:Date.now()});openPlanner(t,data.cards||[],data.plans||null);}
   function updateTripData(trip,cards,plans){setTripData(function(p){return {...p,[trip.id]:{cards:cards,plans:plans}};});setTrips(function(p){return p.map(function(t){return t.id===trip.id?trip:t;});});}
   function deleteTrip(tid){
-    var t=trips.find(function(x){return x.id===tid;});
     setTrips(function(p){return p.filter(function(t){return t.id!==tid;});});
     setTripData(function(p){var n=Object.assign({},p);delete n[tid];return n;});
-    // 只有云协同行程才从 Bmob 删除（其他人可能还在用这个行程！实际上我们不该删 Bmob 记录，只删本地引用）
-    // 所以这里不调用 fbDelete —— 让云端数据保留，其他协同成员不受影响
+    // Also remove from Firebase if enabled
+    if(hasFB)try{window._db.ref('trips/'+tid).remove();}catch(_){}
   }
 
   if(sc==='login')return <Login go={function(){setSc('home');}}/>;
   if(sc==='planner'&&cur)return <Planner bundle={cur} back={function(){setSc('home');}} onUpdate={updateTripData}/>;
   return <div>
     {createOpen&&<CreateModal onAdd={function(t){openPlanner(t,[],null);}} onClose={function(){setCreateOpen(false);}}/>}
-    <Home trips={trips} enter={function(t){openPlanner(t,[],null);}} create={function(){setCreateOpen(true);}} importTrip={importTrip} importCloudTrip={importCloudTrip} onDelete={deleteTrip}/>
+    <Home trips={trips} enter={function(t){openPlanner(t,[],null);}} create={function(){setCreateOpen(true);}} importTrip={importTrip} onDelete={deleteTrip}/>
   </div>;
 }
 
