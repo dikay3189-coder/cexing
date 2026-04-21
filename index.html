@@ -49,7 +49,7 @@ var _hmt = _hmt || [];
   s.parentNode.insertBefore(hm, s);
 })();
 </script>
-
+<script src="https://cdn.jsdelivr.net/npm/hydrogen-js-sdk/dist/Bmob-2.2.5.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -94,10 +94,51 @@ function fmtDur(h){
   return fmtDurMin(Math.round(h*60));
 }
 
-const hasFB=typeof window!=='undefined'&&window._db;
-function fbSave(id,d){if(!hasFB)return;try{window._db.ref('trips/'+id).set(d);}catch(e){}}
-function fbSub(id,cb){if(!hasFB)return function(){};try{var r=window._db.ref('trips/'+id);r.on('value',function(s){var v=s.val();if(v)cb(v);});return function(){r.off();};}catch(e){return function(){};}}
-function fbGet(id){if(!hasFB)return Promise.resolve(null);return window._db.ref('trips/'+id).once('value').then(function(s){return s.val();});}
+// 初始化 Bmob 云端引擎
+Bmob.initialize("d5c9d6148bb456355e37a678ab088a7d", "c13a0d14dbcf26c19994117176578e30");
+const hasFB = true; // 正式开启云端模式
+
+// 1. 云端保存逻辑
+function fbSave(id, d) {
+  if (!hasFB) return;
+  const query = Bmob.Query('TripData');
+  query.equalTo("tripId", "==", id);
+  query.find().then(res => {
+    if (res.length > 0) {
+      // 如果云端已经有这个行程，就更新它
+      res[0].set('data', JSON.stringify(d));
+      res[0].save();
+    } else {
+      // 如果没有，就新建一条记录
+      query.set("tripId", id);
+      query.set("data", JSON.stringify(d));
+      query.save();
+    }
+  }).catch(err => console.log('保存失败', err));
+}
+
+// 2. 云端获取逻辑
+function fbGet(id) {
+  if (!hasFB) return Promise.resolve(null);
+  const query = Bmob.Query('TripData');
+  query.equalTo("tripId", "==", id);
+  return query.find().then(res => {
+    if (res.length > 0) return JSON.parse(res[0].data);
+    return null;
+  }).catch(() => null);
+}
+
+// 3. 实时协同监听逻辑 (心跳轮询机制)
+function fbSub(id, cb) {
+  if (!hasFB) return function() {};
+  // 采用极简的轮询方案：每 2.5 秒向云端索要一次最新数据
+  let timer = setInterval(() => {
+    fbGet(id).then(data => {
+      if (data) cb(data);
+    });
+  }, 2500);
+  return function() { clearInterval(timer); };
+}
 
 const LS='cexing_v1';
 function ldLS(){try{var r=localStorage.getItem(LS);return r?JSON.parse(r):null;}catch(e){console.warn('ldLS failed',e);return null;}}
